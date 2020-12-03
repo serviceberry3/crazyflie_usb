@@ -26,6 +26,7 @@ import se.bitcraze.crazyfliecontrol.console.ConsoleListener;
 import se.bitcraze.crazyfliecontrol.controller.AbstractController;
 import se.bitcraze.crazyfliecontrol.controller.GamepadController;
 import se.bitcraze.crazyfliecontrol.controller.IController;
+import se.bitcraze.crazyfliecontrol.controller.WifiDirect;
 
 public class MainPresenter {
 
@@ -50,14 +51,15 @@ public class MainPresenter {
     private int mCpuFlash = 0;
     private boolean isZrangerAvailable = false;
     private boolean heightHold = false;
+    private WifiDirect wifiDirect;
 
     private Thread mSendJoystickDataThread;
     private ConsoleListener mConsoleListener;
 
     //constrctor
     public MainPresenter(MainActivity mainActivity) {
-
         this.mainActivity = mainActivity;
+        wifiDirect = new WifiDirect(mainActivity);
     }
 
     public void onDestroy() {
@@ -232,7 +234,15 @@ public class MainPresenter {
     }
 
     public void connectWifiDirect() {
+        wifiDirect.discoverPeers();
+    }
 
+    public void connectToPixel() {
+        wifiDirect.connectTo(wifiDirect.pixelDev);
+    }
+
+    public WifiDirect getWifiDirect() {
+        return wifiDirect;
     }
 
     public void connectCrazyradio(int radioChannel, int radioDatarate, File mCacheDir) {
@@ -267,19 +277,24 @@ public class MainPresenter {
             mDriver.addConnectionListener(crazyflieConnectionAdapter);
 
             mCrazyflie = new Crazyflie(mDriver, mCacheDir);
+
             if (mDriver instanceof RadioDriver) {
                 mCrazyflie.setConnectionData(connectionData);
             }
-            // connect
+
+
+            //connect
             mCrazyflie.connect();
 
-            // add console listener
+            //add console listener
             if (mCrazyflie != null) {
                 mConsoleListener = new ConsoleListener();
                 mConsoleListener.setMainActivity(mainActivity);
                 mCrazyflie.addDataListener(mConsoleListener);
             }
-        } else {
+        }
+
+        else {
             mainActivity.showToastie("Cannot connect: Crazyradio not attached and Bluetooth LE not available");
         }
     }

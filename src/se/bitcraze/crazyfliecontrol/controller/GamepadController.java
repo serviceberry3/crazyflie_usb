@@ -122,7 +122,9 @@ public class GamepadController extends AbstractController {
 
             mSplit_axis_yaw_right = (float) event.getAxisValue(mSplitAxisYawRightAxis);
             mSplit_axis_yaw_left = (float) event.getAxisValue(mSplitAxisYawLeftAxis);
-        } else {
+        }
+
+        else {
             Log.w(LOG_TAG, "event == null!");
         }
     }

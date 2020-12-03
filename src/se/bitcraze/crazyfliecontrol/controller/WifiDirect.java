@@ -24,6 +24,7 @@ import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.ListView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -45,7 +46,6 @@ public class WifiDirect {
     private MainActivity mainActivity;
 
     private ListView listView;
-    private ArrayAdapter aa;
     private TextView tv;
     private Button buttonDiscover;
 
@@ -54,6 +54,8 @@ public class WifiDirect {
     IntentFilter p2pEnabled;
 
     private Handler handler = new Handler();
+    public final String pixel = "Android_ea5c";
+    public WifiP2pDevice pixelDev = null;
 
     //This class provides API for managing Wi-Fi peer-to-peer (Wifi Direct) connectivity. This lets app discover available peers,
     //setup connection to peers and query for list of peers. When a p2p connection is formed over wifi, the device continues
@@ -63,6 +65,9 @@ public class WifiDirect {
 
     public WifiDirect(MainActivity activity) {
         this.mainActivity = activity;
+
+        //initialize the p2p channel
+        init();
     }
 
     public void init() {
@@ -73,7 +78,7 @@ public class WifiDirect {
         wifiDirectChannel = wifiP2pManager.initialize(mainActivity, mainActivity.getMainLooper(),
                 new WifiP2pManager.ChannelListener() {
                     public void onChannelDisconnected() {
-                        //re-initialize the WifiDirect upon disconnection
+                        //re-initialize the WifiDirect channel upon disconnection
                         init();
                     }
                 }
@@ -85,9 +90,9 @@ public class WifiDirect {
     //indicate whether initiation of the action was a success or a failure. Reason of failure can be ERROR, P2P_UNSUPPORTED or BUSY
     private WifiP2pManager.ActionListener actionListener = new WifiP2pManager.ActionListener() {
         public void onFailure(int reason) {
-            String errorMessage = "WiFi Direct Failed: ";
+            String errorMessage = "WiFi Direct failed with error: ";
 
-
+            //error filter
             switch (reason) {
                 case WifiP2pManager.BUSY:
                     errorMessage += "Framework busy.";
@@ -104,7 +109,7 @@ public class WifiDirect {
             }
 
             //print out the final error message to the log
-            Log.d(TAG, errorMessage);
+            Log.e(TAG, errorMessage);
         }
 
         public void onSuccess() {
@@ -117,9 +122,28 @@ public class WifiDirect {
         wifiP2pManager.requestPeers(wifiDirectChannel,
                 new WifiP2pManager.PeerListListener() {
                     public void onPeersAvailable(WifiP2pDeviceList peers) {
+                        //clear the old peers list
                         deviceList.clear();
+
+                        //add all the found peers to the list
                         deviceList.addAll(peers.getDeviceList());
-                        aa.notifyDataSetChanged();
+
+                        //find the Pixel we want to connect to and set that as pixelDev so we remember it
+                        //if (pixelDev==null) {
+                            for (WifiP2pDevice dev : deviceList) {
+                                Log.i(TAG, dev.deviceName);
+
+
+                                if (dev.deviceName.equals("Android_ea5c")) {
+                                    Log.i(TAG, "Found Android_ea5c, setting dev...");
+                                    Toast.makeText(mainActivity, "Ready to hit lower button.", Toast.LENGTH_LONG).show();
+
+                                    pixelDev = dev;
+
+                                    break;
+                                }
+                            }
+                        //}
                     }
                 });
     }
@@ -128,7 +152,7 @@ public class WifiDirect {
     //An initiated discovery request from an app stays active until device starts connecting to a peer, forms a p2p group, or there's an explicit
     //stopPeerDiscovery(). Apps can listen to WIFI_P2P_DISCOVERY_CHANGED_ACTION to know if a peer-to-peer discovery is running or stopped.
     //WIFI_P2P_PEERS_CHANGED_ACTION indicates if peer list has changed
-    private void discoverPeers() {
+    public void discoverPeers() {
         //make sure we have permission
         if (ActivityCompat.checkSelfPermission(mainActivity, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             Log.e(TAG, "discoverPeers(): ACCESS_FINE_LOCATION not granted");
@@ -136,6 +160,7 @@ public class WifiDirect {
         }
 
         Log.i(TAG, "Running discoverPeers()...");
+
         //run discoverPeers() method of WifiP2pManager
         wifiP2pManager.discoverPeers(wifiDirectChannel, actionListener);
     }
@@ -144,17 +169,29 @@ public class WifiDirect {
 
 
     //request connection to a wifi direct peer
-    private void connectTo(WifiP2pDevice device) {
+    public void connectTo(WifiP2pDevice device) {
+        //create new p2p configuration
         WifiP2pConfig config = new WifiP2pConfig();
+
+        //get address of target device
         config.deviceAddress = device.deviceAddress;
 
+        //make sure we have fine location perm
         if (ActivityCompat.checkSelfPermission(mainActivity, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            Log.e(TAG, "P2P connect error: fine location perm not granted");
             return;
         }
+
+        //connect to the p2p device using the above address we got from the device
         wifiP2pManager.connect(wifiDirectChannel, config, actionListener);
     }
 
+
+    //something was connected or disconnected
     public void connectionChanged(Intent intent) {
+        Log.i(TAG, "Connection CHANGED");
+
+
         //Extract the NetworkInfo
         String extraKey = WifiP2pManager.EXTRA_NETWORK_INFO;
         NetworkInfo networkInfo = (NetworkInfo) intent.getParcelableExtra(extraKey);
@@ -162,9 +199,8 @@ public class WifiDirect {
         //Check if we're connected
         assert networkInfo != null;
         if (networkInfo.isConnected()) {
-
-
             Log.i(TAG, "Network is connected to something...");
+
             wifiP2pManager.requestConnectionInfo(wifiDirectChannel,
                     new WifiP2pManager.ConnectionInfoListener() {
                         public void onConnectionInfoAvailable(WifiP2pInfo info) {
@@ -175,10 +211,7 @@ public class WifiDirect {
 
                                 //If we're the server
                                 if (info.isGroupOwner) {
-
                                     Log.i(TAG, "We're the server, creating ServerSocket in background and waiting for client...");
-                                    //initiateServerSocket();
-
 
                                     //create ServerSocket in background and wait for client to connect
                                     FileServerAsyncTask asyncServerSockInit = new FileServerAsyncTask();
@@ -190,6 +223,7 @@ public class WifiDirect {
                                 else if (info.groupFormed) {
                                     Log.i(TAG, "We're the client");
 
+                                    //create Socket in background and request connection to server
                                     initiateClientSocket(info.groupOwnerAddress.getHostAddress());
                                 }
                             }
@@ -199,20 +233,6 @@ public class WifiDirect {
 
         else {
             Log.d(TAG, "Wi-Fi Direct Disconnected");
-        }
-    }
-
-
-    private void initiateServerSocket() {
-        ServerSocket serverSocket;
-        try {
-            //instantiate a ServerSocket
-            serverSocket = new ServerSocket(8988);
-            Socket serverClient = serverSocket.accept();
-        }
-
-        catch (IOException e) {
-            Log.e(TAG, "I/O Exception", e);
         }
     }
 
@@ -259,11 +279,12 @@ public class WifiDirect {
         }
     }
 
-
     private BufferedReader in;
     private PrintWriter out;
     private InputStream inStream;
     private OutputStream outStream;
+
+//-----------------------------------------------------------------CLIENT CODE-------------------------------------------------------------------------------
 
     //create a client socket on a background thread
     private void initiateClientSocket(final String hostAddress) {
@@ -289,56 +310,23 @@ public class WifiDirect {
                 try {
                     Log.i(TAG, "initiateClientSocket(): calling bind");
 
-
                     socket.bind(null);
 
                     socket.connect(socketAddress, timeout);
 
-                    success = 1;
                     Log.i(TAG, "Client-server connection successful!!");
 
-                    //get resources to output stuff to the client's input stream
-                    //out = new PrintWriter(socket.getOutputStream(), true);
-
-                    //get the client's input stream (incoming data to client)
-                    //in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-
-                    /*
+                    //get input and output streams for the socket
                     outStream = socket.getOutputStream();
                     inStream = socket.getInputStream();
 
-                    long start = System.currentTimeMillis();
+                    Log.i(TAG, "Client: sending 48 to server...");
 
-                    //Log.i(TAG, "Client: sending 48 to server...");
 
-                    //ping the server
-                    //out.print(48);
+                    //ping the server test
                     outStream.write(48);
 
-                    //Log.i(TAG, "Client: data sent to server complete, now reading...");
-
-                    //int got = in.read();
-
-                    int got = inStream.read();
-
-                    //Log.i(TAG, "Client: readback complete");
-
-                    long end = System.currentTimeMillis();
-
-                    Log.i(TAG, String.format("Got %d back from server after %d ms", got, (end - start) ));
-
-                    /*
-                    //Create a byte stream from a JPEG file and pipe it to the output stream
-                    //of the socket. This data is retrieved by the server device.
-                    OutputStream outputStream = socket.getOutputStream();
-                    ContentResolver cr = MainActivity.this.getApplicationContext().getContentResolver();
-
-                    //write a 4 into the stream
-                    outputStream.write(bytes);
-
-                    //close the stream
-                    outputStream.close();
-                     */
+                    Log.i(TAG, "Client: data sent to server complete, now reading...");
                 }
 
                 catch (IOException e) {
@@ -361,96 +349,74 @@ public class WifiDirect {
                 }
             }
         }).start();
-
     }
+
+//-----------------------------------------------------------------CLIENT CODE-------------------------------------------------------------------------------
 
 
     private List<WifiP2pDevice> deviceList = new ArrayList<>();
 
 
 
+    //---------------------------------------------------------------------SERVER CODE---------------------------------------------------------------------------
+
     //Server socket that initializes in background and accepts connection and reads data from client (use of AsyncTask here is probly stupid)
     public static class FileServerAsyncTask extends AsyncTask<Void, Void, Void> { //params passed, progress update returned, final returned
         private Context context;
         private TextView statusText;
-        private BufferedReader in;
-        private PrintWriter out;
 
         private OutputStream outStream;
         private InputStream inStream;
+
+        private ServerSocket serverSocket;
 
         @Override
         protected Void doInBackground(Void... params) {
             try {
                 //Create a server socket and wait for client connections. This
                 //call blocks until a connection is accepted from a client
-                ServerSocket serverSocket = new ServerSocket(8988);
+                serverSocket = new ServerSocket(8988);
 
                 Log.d(TAG, "Server: Socket opened port 8988, waiting for client");
-
                 Log.i(TAG, "Address: " + serverSocket.getLocalSocketAddress());
-
-                //String hostname =
-
-                //serverSocket.bind();
 
                 //block until connection from client comes through
                 Socket client = serverSocket.accept();
 
-                Log.d(TAG, "Server: connection done");
+                Log.d(TAG, "Server: connection from client came through");
 
-                //get stream to output stuff to the client's input stream
-                //out = new PrintWriter(client.getOutputStream(), true);
-
-                //get stream to read stuff in from the client's output stream
-                //in = new BufferedReader(new InputStreamReader(client.getInputStream()));
-
-                /*
+                //get input and output streams for the client
                 outStream = client.getOutputStream();
                 inStream = client.getInputStream();
 
                 Log.d(TAG, "Server: reading in data...");
 
-                //wait for data
-                //int greeting = in.read();
-                int greeting = inStream.read();
-
-                Log.d(TAG, "Server: reading in data complete");
-
-                if (greeting == 48) {
-                    //out.print(50);
-                    outStream.write(50);
-                }
-
-
-                else {
-                    Log.i(TAG, "Server: no data found");
-                    //out.println("Unrecognized greeting");
-                }
-
-
-                /*
                 byte[] in = new byte[10];
 
-                //now a client has initialized and transferred/output data via stream
-                //now we want to save the input stream from the client
-                InputStream inputStream = client.getInputStream();
+                //this call BLOCKS until data detected and read in
+                int dataIn = inStream.read(in);
 
-                int charsRead = inputStream.read(in);
-
+                Log.d(TAG, "Server: reading in data complete");
                 Log.d(TAG, String.format("Got message from client: " + in[0]));
-
-                 */
-
-                //serverSocket.close();
             }
 
             catch (IOException e) {
                 e.printStackTrace();
             }
 
+            finally {
+                try {
+                    //close up the socket
+                    serverSocket.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+
             return null;
         }
+
+//--------------------------------------------------------------------SERVER CODE------------------------------------------------------------------------
 
 
         @Override

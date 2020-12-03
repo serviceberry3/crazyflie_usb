@@ -118,6 +118,7 @@ public class MainActivity extends Activity {
     private int mSoundDisconnect;
 
     private ImageButton mToggleConnectButton;
+    private ImageButton mRequestConnectButton;
     private ImageButton mRingEffectButton;
     private ImageButton mHeadlightButton;
     private ImageButton mBuzzerSoundButton;
@@ -145,9 +146,6 @@ public class MainActivity extends Activity {
 
         //instantiate a MainPresenter
         mPresenter = new MainPresenter(this);
-
-        wifiDirect = new WifiDirect(this);
-        wifiDirect.init();
 
         //create the p2p action intent filters for the callback fxns
         peerfilter = new IntentFilter(WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION);
@@ -185,6 +183,7 @@ public class MainActivity extends Activity {
 
         //initialize buttons
         mToggleConnectButton = (ImageButton) findViewById(R.id.imageButton_connect);
+        mRequestConnectButton = (ImageButton) findViewById(R.id.imageButton_request_connect);
         initializeMenuButtons();
 
         //view to display flight data
@@ -277,12 +276,22 @@ public class MainActivity extends Activity {
     }
 
     private void initializeMenuButtons() {
+        mRequestConnectButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                requestConnToPixel();
+            }
+        });
+
+
+        //set connect button (the one with two arrows) click listener
         mToggleConnectButton.setOnClickListener(new View.OnClickListener() {
 
             @Override
             public void onClick(View v) {
 
                 try {
+                    //if we're already connected
                     if (mPresenter != null && mPresenter.getCrazyflie() != null && mPresenter.getCrazyflie().isConnected()) {
                         mPresenter.disconnect();
                     }
@@ -300,14 +309,19 @@ public class MainActivity extends Activity {
                             connectBlePreChecks();
                         }*/
 
+                        //connect to the Pixel for USB packet relay
                         connectToOnboardPhoneViaWifiDirect();
                     }
-                } catch (IllegalStateException e) {
+                }
+
+                catch (IllegalStateException e) {
                     Toast.makeText(MainActivity.this, e.getMessage(), Toast.LENGTH_SHORT).show();
                 }
             }
         });
 
+
+        //set click listener for settings button
         ImageButton settingsButton = (ImageButton) findViewById(R.id.imageButton_settings);
         settingsButton.setOnClickListener(new View.OnClickListener() {
 
@@ -326,13 +340,13 @@ public class MainActivity extends Activity {
     }
 
     private void connectBlePreChecks() {
-        // Check if Bluetooth LE is supported by the Android version
+        //Check if Bluetooth LE is supported by the Android version
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) {
             Log.e(LOG_TAG, Build.VERSION.SDK_INT + "does not support Bluetooth LE.");
             Toast.makeText(this, Build.VERSION.SDK_INT + "does not support Bluetooth LE. Please use a Crazyradio to connect to the Crazyflie instead.", Toast.LENGTH_LONG).show();
             return;
         }
-        // Check if Bluetooth LE is supported by the hardware
+        //Check if Bluetooth LE is supported by the hardware
         if (!getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
             Log.e(LOG_TAG, "Device does not support Bluetooth LE.");
             Toast.makeText(this, "Device does not support Bluetooth LE. Please use a Crazyradio to connect to the Crazyflie instead.", Toast.LENGTH_LONG).show();
@@ -340,20 +354,29 @@ public class MainActivity extends Activity {
         }
 
 
-        // Since Android version 6, ACCESS_COARSE_LOCATION is required for Bluetooth scanning
+        //Since Android version 6, ACCESS_COARSE_LOCATION is required for Bluetooth scanning
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             Log.e(LOG_TAG, "Android version >= 6 requires ACCESS_COARSE_LOCATION permissions for Bluetooth scanning.");
 
             //request location permission for bluetooth scanning
             requestPermissions(Manifest.permission.ACCESS_COARSE_LOCATION, MY_PERMISSIONS_REQUEST_LOCATION);
-        } else {
+        }
+
+        else {
             //run the bluetooth connection
             connectBle();
         }
     }
 
     private void connectToOnboardPhoneViaWifiDirect() {
+        //showToastie("Connecting Wifi Direct...");
+        Log.i(LOG_TAG, "Connecting to onboard phone...");
         mPresenter.connectWifiDirect();
+    }
+
+    private void requestConnToPixel() {
+        Log.i(LOG_TAG, "Requesting conn to Pixel...");
+        mPresenter.connectToPixel();
     }
 
     private void connectBle() {
@@ -398,7 +421,9 @@ public class MainActivity extends Activity {
                 Log.d(LOG_TAG, "ACCESS_COARSE_LOCATION permission request has been denied.");
                 //Toast.makeText(this,  "Android version >= 6 requires ACCESS_COARSE_LOCATION permissions for Bluetooth scanning.", Toast.LENGTH_LONG).show();
                 ActivityCompat.requestPermissions(MainActivity.this, new String[]{permission}, request);
-            } else {
+            }
+
+            else {
                 ActivityCompat.requestPermissions(MainActivity.this, new String[]{permission}, request);
             }
         } else {
@@ -416,7 +441,9 @@ public class MainActivity extends Activity {
                 if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     // permission was granted, yay! Do the contacts-related task you need to do.
                     checkLocationSettings();
-                } else {
+                }
+
+                else {
                     // permission denied, boo! Disable the functionality that depends on this permission.
                     Log.d(LOG_TAG, "ACCESS_COARSE_LOCATION permission request has been denied.");
                     Toast.makeText(this, "Android version >= 6 requires ACCESS_COARSE_LOCATION permissions for Bluetooth scanning.", Toast.LENGTH_LONG).show();
@@ -715,21 +742,19 @@ public class MainActivity extends Activity {
         }
     };
 
+    //callback for when WifiP2PManager.discoverPeers() is called
     BroadcastReceiver peerDiscoveryReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            if (ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.ACCESS_FINE_LOCATION) !=
-                    PackageManager.PERMISSION_GRANTED) {
+            //make sure fine location permission granted
+            if (ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                 Log.e(LOG_TAG, "peerDiscoveryReceiver.onReceive(): ACCESS_FINE_LOCATION not granted");
                 return;
             }
 
-            Log.i(LOG_TAG, "Peers have changed");
+            Log.i(LOG_TAG, "peerDiscoveryReceiver: Peers have updated");
 
-
-            wifiDirect.requestPeersList();
-
-
+            mPresenter.getWifiDirect().requestPeersList();
         }
     };
 
@@ -739,6 +764,17 @@ public class MainActivity extends Activity {
         public void onReceive(Context context, Intent intent) {
             int state = intent.getIntExtra(WifiP2pManager.EXTRA_WIFI_STATE, WifiP2pManager.WIFI_P2P_STATE_DISABLED);
 
+
+            if (state == WifiP2pManager.WIFI_P2P_STATE_ENABLED) {
+                mToggleConnectButton.setEnabled(true);
+                mRequestConnectButton.setEnabled(true);
+            }
+
+            else {
+                Log.e(LOG_TAG, "FALSE");
+                mToggleConnectButton.setEnabled(false);
+                mRequestConnectButton.setEnabled(false);
+            }
 
             //TODO: do anything with the state? Not now
         }
@@ -753,7 +789,7 @@ public class MainActivity extends Activity {
             Log.i(LOG_TAG, "Wifi Direct connection status change detected");
 
 
-            wifiDirect.connectionChanged(intent);
+            mPresenter.getWifiDirect().connectionChanged(intent);
 
         }
 
