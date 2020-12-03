@@ -41,7 +41,7 @@ import se.bitcraze.crazyfliecontrol2.R;
 
 public class WifiDirect {
 
-    private static final String TAG = "MainActivity";
+    private static final String TAG = "WifiDirect";
     private MainActivity mainActivity;
 
     private ListView listView;
@@ -58,23 +58,23 @@ public class WifiDirect {
     //This class provides API for managing Wi-Fi peer-to-peer (Wifi Direct) connectivity. This lets app discover available peers,
     //setup connection to peers and query for list of peers. When a p2p connection is formed over wifi, the device continues
     //to maintain the uplink connection over mobile or any other available network for internet connectivity on the device.
-    private WifiP2pManager wifiP2pManager;
-    private WifiP2pManager.Channel wifiDirectChannel;
+    public WifiP2pManager wifiP2pManager;
+    public WifiP2pManager.Channel wifiDirectChannel;
 
-    public WifiDirect(MainActivity activity, SharedPreferences preferences) {
+    public WifiDirect(MainActivity activity) {
         this.mainActivity = activity;
     }
 
-    private void initializeWiFiDirect() {
+    public void init() {
         //initialize the peer-to-peer (Wifi Direct) connection manager
-        wifiP2pManager = (WifiP2pManager) getSystemService(Context.WIFI_P2P_SERVICE);
+        wifiP2pManager = (WifiP2pManager) mainActivity.getSystemService(Context.WIFI_P2P_SERVICE);
 
         //WifiP2pManager's initialize() fxn returns channel instance that is necessary for performing any further p2p operations
-        wifiDirectChannel = wifiP2pManager.initialize(this, getMainLooper(),
+        wifiDirectChannel = wifiP2pManager.initialize(mainActivity, mainActivity.getMainLooper(),
                 new WifiP2pManager.ChannelListener() {
                     public void onChannelDisconnected() {
                         //re-initialize the WifiDirect upon disconnection
-                        initializeWiFiDirect();
+                        init();
                     }
                 }
         );
@@ -113,82 +113,16 @@ public class WifiDirect {
         }
     };
 
-
-    public void mainSetup(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
-
-
-        listView = (ListView) mainActivity.findViewById(R.id.listView);
-
-        aa = new ArrayAdapter<WifiP2pDevice>(mainActivity, android.R.layout.simple_list_item_1, deviceList);
-
-
-        listView.setAdapter(aa);
-
-        initializeWiFiDirect();
-
-        peerfilter = new IntentFilter(WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION);
-
-        connectionfilter = new IntentFilter(WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION);
-
-        p2pEnabled = new IntentFilter(WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION);
-
-        //get the "DISCOVER PEERS" button
-        buttonDiscover = (Button) mainActivity.findViewById(R.id.buttonDiscover);
-
-        //run discoverPeers() upon click
-        buttonDiscover.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                discoverPeers();
-            }
-        });
-
-        //get the "ENABLE" button
-        Button buttonEnable = (Button) mainActivity.findViewById(R.id.buttonEnable);
-
-        //set it so that "ENABLE" button just opens device wireless settings upon click
-        buttonEnable.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                Intent intent = new Intent(android.provider.Settings.ACTION_WIRELESS_SETTINGS);
-
-                //open wifi settings
-                startActivity(intent);
-            }
-        });
-
-        Button buttonServer = (Button) mainActivity.findViewById(R.id.buttonServer);
-
-        buttonServer.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                new becomeServerForPC().start();
-            }
-        });
-
-        //set list item (device) so that when clicked, connectTo() function is run on that device
-        listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-            public void onItemClick(AdapterView<?> arg0, View arg1, int index, long arg3) {
-                connectTo(deviceList.get(index));
-            }
-        });
+    public void requestPeersList() {
+        wifiP2pManager.requestPeers(wifiDirectChannel,
+                new WifiP2pManager.PeerListListener() {
+                    public void onPeersAvailable(WifiP2pDeviceList peers) {
+                        deviceList.clear();
+                        deviceList.addAll(peers.getDeviceList());
+                        aa.notifyDataSetChanged();
+                    }
+                });
     }
-
-    //receive a Wifi Direct status change
-    BroadcastReceiver p2pStatusReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            int state = intent.getIntExtra(WifiP2pManager.EXTRA_WIFI_STATE, WifiP2pManager.WIFI_P2P_STATE_DISABLED);
-
-            if (state == WifiP2pManager.WIFI_P2P_STATE_ENABLED) {
-                buttonDiscover.setEnabled(true);
-            }
-
-            else {
-                buttonDiscover.setEnabled(false);
-            }
-        }
-    };
 
     //discover Wifi Direct peers
     //An initiated discovery request from an app stays active until device starts connecting to a peer, forms a p2p group, or there's an explicit
@@ -196,7 +130,7 @@ public class WifiDirect {
     //WIFI_P2P_PEERS_CHANGED_ACTION indicates if peer list has changed
     private void discoverPeers() {
         //make sure we have permission
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        if (ActivityCompat.checkSelfPermission(mainActivity, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             Log.e(TAG, "discoverPeers(): ACCESS_FINE_LOCATION not granted");
             return;
         }
@@ -207,26 +141,7 @@ public class WifiDirect {
     }
 
 
-    BroadcastReceiver peerDiscoveryReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if (ActivityCompat.checkSelfPermission(mainActivity, Manifest.permission.ACCESS_FINE_LOCATION) !=
-                    PackageManager.PERMISSION_GRANTED) {
-                Log.e(TAG, "peerDiscoveryReceiver.onReceive(): ACCESS_FINE_LOCATION not granted");
-                return;
-            }
 
-            Log.i(TAG, "Peers have changed");
-            wifiP2pManager.requestPeers(wifiDirectChannel,
-                    new WifiP2pManager.PeerListListener() {
-                        public void onPeersAvailable(WifiP2pDeviceList peers) {
-                            deviceList.clear();
-                            deviceList.addAll(peers.getDeviceList());
-                            aa.notifyDataSetChanged();
-                        }
-                    });
-        }
-    };
 
     //request connection to a wifi direct peer
     private void connectTo(WifiP2pDevice device) {
@@ -239,58 +154,53 @@ public class WifiDirect {
         wifiP2pManager.connect(wifiDirectChannel, config, actionListener);
     }
 
-    //wifi direct peer connection callback
-    BroadcastReceiver connectionChangedReceiver = new BroadcastReceiver() {
-        //executes when the Wifi Direct connection status changes
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            Log.i(TAG, "Wifi Direct connection status change detected");
+    public void connectionChanged(Intent intent) {
+        //Extract the NetworkInfo
+        String extraKey = WifiP2pManager.EXTRA_NETWORK_INFO;
+        NetworkInfo networkInfo = (NetworkInfo) intent.getParcelableExtra(extraKey);
 
-            //Extract the NetworkInfo
-            String extraKey = WifiP2pManager.EXTRA_NETWORK_INFO;
-            NetworkInfo networkInfo = (NetworkInfo) intent.getParcelableExtra(extraKey);
-
-            //Check if we're connected
-            assert networkInfo != null;
-            if (networkInfo.isConnected()) {
+        //Check if we're connected
+        assert networkInfo != null;
+        if (networkInfo.isConnected()) {
 
 
-                Log.i(TAG, "Network is connected to something...");
-                wifiP2pManager.requestConnectionInfo(wifiDirectChannel,
-                        new WifiP2pManager.ConnectionInfoListener() {
-                            public void onConnectionInfoAvailable(WifiP2pInfo info) {
-                                //If the connection is established
-                                if (info.groupFormed) {
-                                    Log.i(TAG, "Connection has been established!");
-                                    //If we're the server
-                                    if (info.isGroupOwner) {
-
-                                        Log.i(TAG, "We're the server, creating ServerSocket in background and waiting for client...");
-                                        //initiateServerSocket();
-
-                                        //create ServerSocket in background and wait for client to connect
-                                        FileServerAsyncTask asyncServerSockInit = new FileServerAsyncTask();
-                                        asyncServerSockInit.execute();
-
-                                    }
+            Log.i(TAG, "Network is connected to something...");
+            wifiP2pManager.requestConnectionInfo(wifiDirectChannel,
+                    new WifiP2pManager.ConnectionInfoListener() {
+                        public void onConnectionInfoAvailable(WifiP2pInfo info) {
+                            //If the connection is established
+                            if (info.groupFormed) {
+                                Log.i(TAG, "Connection has been established!");
 
 
-                                    //If we're the client
-                                    else if (info.groupFormed) {
-                                        Log.i(TAG, "We're the client");
+                                //If we're the server
+                                if (info.isGroupOwner) {
 
-                                        initiateClientSocket(info.groupOwnerAddress.getHostAddress());
-                                    }
+                                    Log.i(TAG, "We're the server, creating ServerSocket in background and waiting for client...");
+                                    //initiateServerSocket();
+
+
+                                    //create ServerSocket in background and wait for client to connect
+                                    FileServerAsyncTask asyncServerSockInit = new FileServerAsyncTask();
+                                    asyncServerSockInit.execute();
+                                }
+
+
+                                //If we're the client
+                                else if (info.groupFormed) {
+                                    Log.i(TAG, "We're the client");
+
+                                    initiateClientSocket(info.groupOwnerAddress.getHostAddress());
                                 }
                             }
-                        });
-            }
-
-            else {
-                Log.d(TAG, "Wi-Fi Direct Disconnected");
-            }
+                        }
+                    });
         }
-    };
+
+        else {
+            Log.d(TAG, "Wi-Fi Direct Disconnected");
+        }
+    }
 
 
     private void initiateServerSocket() {
@@ -454,24 +364,6 @@ public class WifiDirect {
 
     }
 
-
-    @Override
-    protected void onPause() {
-        unregisterReceiver(peerDiscoveryReceiver);
-        unregisterReceiver(connectionChangedReceiver);
-        unregisterReceiver(p2pStatusReceiver);
-        super.onPause();
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-
-        //register the broadcast receivers to listen
-        registerReceiver(peerDiscoveryReceiver, peerfilter);
-        registerReceiver(connectionChangedReceiver, connectionfilter);
-        registerReceiver(p2pStatusReceiver, p2pEnabled);
-    }
 
     private List<WifiP2pDevice> deviceList = new ArrayList<>();
 

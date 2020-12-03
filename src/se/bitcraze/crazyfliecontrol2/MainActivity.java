@@ -37,6 +37,7 @@ import se.bitcraze.crazyfliecontrol.controller.GamepadController;
 import se.bitcraze.crazyfliecontrol.controller.GyroscopeController;
 import se.bitcraze.crazyfliecontrol.controller.IController;
 import se.bitcraze.crazyfliecontrol.controller.TouchController;
+import se.bitcraze.crazyfliecontrol.controller.WifiDirect;
 import se.bitcraze.crazyfliecontrol.prefs.PreferencesActivity;
 
 import android.Manifest;
@@ -61,6 +62,10 @@ import android.location.LocationManager;
 import android.media.AudioManager;
 import android.media.SoundPool;
 import android.media.SoundPool.OnLoadCompleteListener;
+import android.net.NetworkInfo;
+import android.net.wifi.p2p.WifiP2pDeviceList;
+import android.net.wifi.p2p.WifiP2pInfo;
+import android.net.wifi.p2p.WifiP2pManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
@@ -118,9 +123,16 @@ public class MainActivity extends Activity {
     private ImageButton mBuzzerSoundButton;
     private File mCacheDir;
 
+    private WifiDirect wifiDirect;
+
     private TextView mTextView_battery;
     private TextView mTextView_linkQuality;
     private MainPresenter mPresenter;
+
+
+    IntentFilter peerfilter;
+    IntentFilter connectionfilter;
+    IntentFilter p2pEnabled;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -133,6 +145,16 @@ public class MainActivity extends Activity {
 
         //instantiate a MainPresenter
         mPresenter = new MainPresenter(this);
+
+        wifiDirect = new WifiDirect(this);
+        wifiDirect.init();
+
+        //create the p2p action intent filters for the callback fxns
+        peerfilter = new IntentFilter(WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION);
+
+        connectionfilter = new IntentFilter(WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION);
+
+        p2pEnabled = new IntentFilter(WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION);
 
 
         setDefaultPreferenceValues();
@@ -179,7 +201,7 @@ public class MainActivity extends Activity {
 
         //new intent filter for USB
         IntentFilter filter = new IntentFilter();
-        filter.addAction(this.getPackageName()+".USB_PERMISSION");
+        filter.addAction(this.getPackageName() + ".USB_PERMISSION");
         filter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
         filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
 
@@ -215,9 +237,7 @@ public class MainActivity extends Activity {
                 mCacheDir = new File(appDir, "TOC_cache");
                 mCacheDir.mkdirs();
             }
-        }
-
-        else {
+        } else {
             Log.d(LOG_TAG, "External storage is not writeable.");
             mCacheDir = null;
         }
@@ -228,7 +248,7 @@ public class MainActivity extends Activity {
         return Environment.MEDIA_MOUNTED.equals(state);
     }
 
-    private void setDefaultPreferenceValues(){
+    private void setDefaultPreferenceValues() {
         // Set default preference values
         PreferenceManager.setDefaultValues(this, R.xml.preferences, false);
         // Initialize preferences
@@ -240,9 +260,9 @@ public class MainActivity extends Activity {
 
     private void checkScreenLock() {
         boolean isScreenLock = mPreferences.getBoolean(PreferencesActivity.KEY_PREF_SCREEN_ROTATION_LOCK_BOOL, false);
-        if(isScreenLock){
+        if (isScreenLock) {
             this.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
-        } else{
+        } else {
             this.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
         }
     }
@@ -268,10 +288,9 @@ public class MainActivity extends Activity {
                     }
 
 
-
                     //run the connection: either Crazyradio or Bluetooth
                     else {
-
+                        /*
                         if (isCrazyradioAvailable(MainActivity.this)) {
                             connectCrazyradio();
                         }
@@ -279,7 +298,9 @@ public class MainActivity extends Activity {
 
                         else {
                             connectBlePreChecks();
-                        }
+                        }*/
+
+                        connectToOnboardPhoneViaWifiDirect();
                     }
                 } catch (IllegalStateException e) {
                     Toast.makeText(MainActivity.this, e.getMessage(), Toast.LENGTH_SHORT).show();
@@ -292,8 +313,8 @@ public class MainActivity extends Activity {
 
             @Override
             public void onClick(View v) {
-              Intent intent = new Intent(MainActivity.this, PreferencesActivity.class);
-              startActivity(intent);
+                Intent intent = new Intent(MainActivity.this, PreferencesActivity.class);
+                startActivity(intent);
             }
         });
     }
@@ -314,7 +335,7 @@ public class MainActivity extends Activity {
         // Check if Bluetooth LE is supported by the hardware
         if (!getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
             Log.e(LOG_TAG, "Device does not support Bluetooth LE.");
-            Toast.makeText(this,  "Device does not support Bluetooth LE. Please use a Crazyradio to connect to the Crazyflie instead.", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Device does not support Bluetooth LE. Please use a Crazyradio to connect to the Crazyflie instead.", Toast.LENGTH_LONG).show();
             return;
         }
 
@@ -325,9 +346,7 @@ public class MainActivity extends Activity {
 
             //request location permission for bluetooth scanning
             requestPermissions(Manifest.permission.ACCESS_COARSE_LOCATION, MY_PERMISSIONS_REQUEST_LOCATION);
-        }
-
-        else {
+        } else {
             //run the bluetooth connection
             connectBle();
         }
@@ -379,9 +398,7 @@ public class MainActivity extends Activity {
                 Log.d(LOG_TAG, "ACCESS_COARSE_LOCATION permission request has been denied.");
                 //Toast.makeText(this,  "Android version >= 6 requires ACCESS_COARSE_LOCATION permissions for Bluetooth scanning.", Toast.LENGTH_LONG).show();
                 ActivityCompat.requestPermissions(MainActivity.this, new String[]{permission}, request);
-            }
-
-            else {
+            } else {
                 ActivityCompat.requestPermissions(MainActivity.this, new String[]{permission}, request);
             }
         } else {
@@ -399,12 +416,10 @@ public class MainActivity extends Activity {
                 if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     // permission was granted, yay! Do the contacts-related task you need to do.
                     checkLocationSettings();
-                }
-
-                else {
+                } else {
                     // permission denied, boo! Disable the functionality that depends on this permission.
                     Log.d(LOG_TAG, "ACCESS_COARSE_LOCATION permission request has been denied.");
-                    Toast.makeText(this,  "Android version >= 6 requires ACCESS_COARSE_LOCATION permissions for Bluetooth scanning.", Toast.LENGTH_LONG).show();
+                    Toast.makeText(this, "Android version >= 6 requires ACCESS_COARSE_LOCATION permissions for Bluetooth scanning.", Toast.LENGTH_LONG).show();
                 }
             }
         }
@@ -437,6 +452,12 @@ public class MainActivity extends Activity {
         mBuzzerSoundButton.setEnabled(false);
 
 
+        //register the p2p broadcast receivers to listen
+        registerReceiver(peerDiscoveryReceiver, peerfilter);
+        registerReceiver(connectionChangedReceiver, connectionfilter);
+        registerReceiver(p2pStatusReceiver, p2pEnabled);
+
+
         if (mPreferences.getBoolean(PreferencesActivity.KEY_PREF_IMMERSIVE_MODE_BOOL, false)) {
             setHideyBar();
         }
@@ -458,6 +479,11 @@ public class MainActivity extends Activity {
         if (mController != null) {
             mController.disable();
         }
+
+        //unregister p2p receivers
+        unregisterReceiver(peerDiscoveryReceiver);
+        unregisterReceiver(connectionChangedReceiver);
+        unregisterReceiver(p2pStatusReceiver);
 
 
         updateFlightData();
@@ -495,7 +521,7 @@ public class MainActivity extends Activity {
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        if(mPreferences.getBoolean(PreferencesActivity.KEY_PREF_IMMERSIVE_MODE_BOOL, false) && hasFocus){
+        if (mPreferences.getBoolean(PreferencesActivity.KEY_PREF_IMMERSIVE_MODE_BOOL, false) && hasFocus) {
             new Handler().postDelayed(new Runnable() {
                 @Override
                 public void run() {
@@ -539,20 +565,20 @@ public class MainActivity extends Activity {
         int uiOptions = getWindow().getDecorView().getSystemUiVisibility();
         int newUiOptions = uiOptions;
 
-        if(Build.VERSION.SDK_INT >= 14){
+        if (Build.VERSION.SDK_INT >= 14) {
             newUiOptions |= View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
         }
-        if(Build.VERSION.SDK_INT >= 16){
+        if (Build.VERSION.SDK_INT >= 16) {
             newUiOptions |= View.SYSTEM_UI_FLAG_FULLSCREEN;
         }
-        if(Build.VERSION.SDK_INT >= 18){
+        if (Build.VERSION.SDK_INT >= 18) {
             newUiOptions |= View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
         }
         getWindow().getDecorView().setSystemUiVisibility(newUiOptions);
     }
 
     //TODO: fix indirection
-    public void updateFlightData(){
+    public void updateFlightData() {
         mFlightDataView.updateFlightData(mController.getPitch(), mController.getRoll(), mController.getThrust(), mController.getYaw());
     }
 
@@ -634,8 +660,8 @@ public class MainActivity extends Activity {
                 }
                 break;
             case 1:
-                    // TODO: show warning if no game pad is found?
-                    mController = mGamepadController;
+                // TODO: show warning if no game pad is found?
+                mController = mGamepadController;
                 break;
             default:
                 break;
@@ -650,7 +676,7 @@ public class MainActivity extends Activity {
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
             Log.d(LOG_TAG, "mUsbReceiver action: " + action);
-            if ((MainActivity.this.getPackageName()+".USB_PERMISSION").equals(action)) {
+            if ((MainActivity.this.getPackageName() + ".USB_PERMISSION").equals(action)) {
                 //reached only when USB permission on physical connect was canceled and "Connect" or "Radio Scan" is clicked
                 synchronized (this) {
                     UsbDevice device = (UsbDevice) intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
@@ -669,7 +695,8 @@ public class MainActivity extends Activity {
                 if (device != null && UsbLinkAndroid.isUsbDevice(device, Crazyradio.CRADIO_VID, Crazyradio.CRADIO_PID)) {
                     Log.d(LOG_TAG, "Crazyradio detached");
                     Toast.makeText(MainActivity.this, "Crazyradio detached", Toast.LENGTH_SHORT).show();
-                    playSound(mSoundDisconnect);
+
+
                     if (mPresenter != null && mPresenter.getCrazyflie() != null) {
                         Log.d(LOG_TAG, "linkDisconnect()");
                         mPresenter.disconnect();
@@ -682,13 +709,58 @@ public class MainActivity extends Activity {
                 if (device != null && UsbLinkAndroid.isUsbDevice(device, Crazyradio.CRADIO_VID, Crazyradio.CRADIO_PID)) {
                     Log.d(LOG_TAG, "Crazyradio attached");
                     Toast.makeText(MainActivity.this, "Crazyradio attached", Toast.LENGTH_SHORT).show();
-                    playSound(mSoundConnect);
+
                 }
             }
         }
     };
 
-    private void playSound(int sound){
+    BroadcastReceiver peerDiscoveryReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.ACCESS_FINE_LOCATION) !=
+                    PackageManager.PERMISSION_GRANTED) {
+                Log.e(LOG_TAG, "peerDiscoveryReceiver.onReceive(): ACCESS_FINE_LOCATION not granted");
+                return;
+            }
+
+            Log.i(LOG_TAG, "Peers have changed");
+
+
+            wifiDirect.requestPeersList();
+
+
+        }
+    };
+
+    //receive a Wifi Direct status change
+    BroadcastReceiver p2pStatusReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            int state = intent.getIntExtra(WifiP2pManager.EXTRA_WIFI_STATE, WifiP2pManager.WIFI_P2P_STATE_DISABLED);
+
+
+            //TODO: do anything with the state? Not now
+        }
+    };
+
+
+    //wifi direct peer connection callback
+    BroadcastReceiver connectionChangedReceiver = new BroadcastReceiver() {
+        //executes when the Wifi Direct connection status changes
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            Log.i(LOG_TAG, "Wifi Direct connection status change detected");
+
+
+            wifiDirect.connectionChanged(intent);
+
+        }
+
+    };
+
+
+    private void playSound(int sound) {
         if (mLoaded) {
             float volume = 1.0f;
             mSoundPool.play(sound, volume, volume, 1, 0, 1f);
@@ -721,11 +793,11 @@ public class MainActivity extends Activity {
         return mPresenter;
     }
 
-    public IController getController(){
+    public IController getController() {
         return mController;
     }
 
-    public Controls getControls(){
+    public Controls getControls() {
         return mControls;
     }
 
@@ -743,11 +815,9 @@ public class MainActivity extends Activity {
         int batteryPercentage = (int) (normalizedBattery * 100);
         if (battery == -1f) {
             batteryPercentage = 0;
-        }
-        else if (normalizedBattery < 0f && normalizedBattery > -1f) {
+        } else if (normalizedBattery < 0f && normalizedBattery > -1f) {
             batteryPercentage = 0;
-        }
-        else if (normalizedBattery > 1f) {
+        } else if (normalizedBattery > 1f) {
             batteryPercentage = 100;
         }
         //TODO: FIXME
@@ -760,7 +830,7 @@ public class MainActivity extends Activity {
         });
     }
 
-    public void setLinkQualityText(final String quality){
+    public void setLinkQualityText(final String quality) {
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
@@ -769,7 +839,7 @@ public class MainActivity extends Activity {
         });
     }
 
-    private String format(int identifier, Object o){
+    private String format(int identifier, Object o) {
         return String.format(getResources().getString(identifier), o);
     }
 
@@ -846,3 +916,4 @@ public class MainActivity extends Activity {
         setBatteryLevel(-1.0f);
     }
 }
+
