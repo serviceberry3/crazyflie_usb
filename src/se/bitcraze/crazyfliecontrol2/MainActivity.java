@@ -124,19 +124,28 @@ public class MainActivity extends Activity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+
+        Log.i(LOG_TAG, "Good morning from the Main commander");
+
+
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        //instantiate a MainPresenter
         mPresenter = new MainPresenter(this);
+
 
         setDefaultPreferenceValues();
 
+        //set some textviews for top left corner
         mTextView_battery = (TextView) findViewById(R.id.battery_text);
         mTextView_linkQuality = (TextView) findViewById(R.id.linkQuality_text);
 
+        //initialize the texts to nothing
         setBatteryLevel(-1.0f);
         setLinkQualityText("N/A");
 
+        //instantiate a Controls
         mControls = new Controls(this, mPreferences);
         mControls.setDefaultPreferenceValues(getResources());
 
@@ -144,6 +153,8 @@ public class MainActivity extends Activity {
         mJoystickViewLeft = (JoystickView) findViewById(R.id.joystick_left);
         mJoystickViewRight = (JoystickView) findViewById(R.id.joystick_right);
         mJoystickViewRight.setLeft(false);
+
+        //instantiate a TouchController
         mController = new TouchController(mControls, this, mJoystickViewLeft, mJoystickViewRight);
 
         //initialize gamepad controller
@@ -154,6 +165,7 @@ public class MainActivity extends Activity {
         mToggleConnectButton = (ImageButton) findViewById(R.id.imageButton_connect);
         initializeMenuButtons();
 
+        //view to display flight data
         mFlightDataView = (FlightDataView) findViewById(R.id.flightdataview);
 
         mConsoleScrollView = (ScrollView) findViewById(R.id.console_scrollView);
@@ -165,14 +177,19 @@ public class MainActivity extends Activity {
         mHeadlightButton = (ImageButton) findViewById(R.id.button_headLight);
         mBuzzerSoundButton = (ImageButton) findViewById(R.id.button_buzzerSound);
 
+        //new intent filter for USB
         IntentFilter filter = new IntentFilter();
         filter.addAction(this.getPackageName()+".USB_PERMISSION");
         filter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
         filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
+
+        //register the USB receiver
         registerReceiver(mUsbReceiver, filter);
 
+        //some useless sounds I guess
         initializeSounds();
 
+        //storage
         setCacheDir();
     }
 
@@ -198,7 +215,9 @@ public class MainActivity extends Activity {
                 mCacheDir = new File(appDir, "TOC_cache");
                 mCacheDir.mkdirs();
             }
-        } else {
+        }
+
+        else {
             Log.d(LOG_TAG, "External storage is not writeable.");
             mCacheDir = null;
         }
@@ -246,11 +265,19 @@ public class MainActivity extends Activity {
                 try {
                     if (mPresenter != null && mPresenter.getCrazyflie() != null && mPresenter.getCrazyflie().isConnected()) {
                         mPresenter.disconnect();
-                    } else {
-                        // TODO: FIXME
-                        if(isCrazyradioAvailable(MainActivity.this)) {
+                    }
+
+
+
+                    //run the connection: either Crazyradio or Bluetooth
+                    else {
+
+                        if (isCrazyradioAvailable(MainActivity.this)) {
                             connectCrazyradio();
-                        } else {
+                        }
+
+
+                        else {
                             connectBlePreChecks();
                         }
                     }
@@ -290,13 +317,24 @@ public class MainActivity extends Activity {
             Toast.makeText(this,  "Device does not support Bluetooth LE. Please use a Crazyradio to connect to the Crazyflie instead.", Toast.LENGTH_LONG).show();
             return;
         }
+
+
         // Since Android version 6, ACCESS_COARSE_LOCATION is required for Bluetooth scanning
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             Log.e(LOG_TAG, "Android version >= 6 requires ACCESS_COARSE_LOCATION permissions for Bluetooth scanning.");
+
+            //request location permission for bluetooth scanning
             requestPermissions(Manifest.permission.ACCESS_COARSE_LOCATION, MY_PERMISSIONS_REQUEST_LOCATION);
-        } else {
+        }
+
+        else {
+            //run the bluetooth connection
             connectBle();
         }
+    }
+
+    private void connectToOnboardPhoneViaWifiDirect() {
+        mPresenter.connectWifiDirect();
     }
 
     private void connectBle() {
@@ -341,7 +379,9 @@ public class MainActivity extends Activity {
                 Log.d(LOG_TAG, "ACCESS_COARSE_LOCATION permission request has been denied.");
                 //Toast.makeText(this,  "Android version >= 6 requires ACCESS_COARSE_LOCATION permissions for Bluetooth scanning.", Toast.LENGTH_LONG).show();
                 ActivityCompat.requestPermissions(MainActivity.this, new String[]{permission}, request);
-            } else {
+            }
+
+            else {
                 ActivityCompat.requestPermissions(MainActivity.this, new String[]{permission}, request);
             }
         } else {
@@ -353,12 +393,15 @@ public class MainActivity extends Activity {
     @Override
     public void onRequestPermissionsResult(int requestCode, String permissions[], int[] grantResults) {
         switch (requestCode) {
+            //handle a location request permission result
             case MY_PERMISSIONS_REQUEST_LOCATION: {
                 // If request is cancelled, the result arrays are empty.
                 if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     // permission was granted, yay! Do the contacts-related task you need to do.
                     checkLocationSettings();
-                } else {
+                }
+
+                else {
                     // permission denied, boo! Disable the functionality that depends on this permission.
                     Log.d(LOG_TAG, "ACCESS_COARSE_LOCATION permission request has been denied.");
                     Toast.makeText(this,  "Android version >= 6 requires ACCESS_COARSE_LOCATION permissions for Bluetooth scanning.", Toast.LENGTH_LONG).show();
@@ -369,20 +412,31 @@ public class MainActivity extends Activity {
 
     @Override
     public void onResume() {
+        //a bulk of work is done here it seems like
+
         super.onResume();
-        //TODO: improve
+
+
         PreferencesActivity.setDefaultJoystickSize(this);
         mJoystickViewLeft.setPreferences(mPreferences);
         mJoystickViewRight.setPreferences(mPreferences);
+
+
         mControls.setControlConfig();
         mGamepadController.setControlConfig();
+
+
         resetInputMethod();
         checkScreenLock();
         checkConsole();
+
+
         //disable action buttons
         mRingEffectButton.setEnabled(false);
         mHeadlightButton.setEnabled(false);
         mBuzzerSoundButton.setEnabled(false);
+
+
         if (mPreferences.getBoolean(PreferencesActivity.KEY_PREF_IMMERSIVE_MODE_BOOL, false)) {
             setHideyBar();
         }
@@ -404,6 +458,8 @@ public class MainActivity extends Activity {
         if (mController != null) {
             mController.disable();
         }
+
+
         updateFlightData();
         mPresenter.disconnect();
     }
@@ -516,6 +572,9 @@ public class MainActivity extends Activity {
         });
     }
 
+    //You can override this to intercept all generic motion events before
+    // they are dispatched to the window
+    //events regarding moving the joysticks
     @Override
     public boolean dispatchGenericMotionEvent(MotionEvent event) {
         // Check that the event came from a joystick since a generic motion event could be almost anything.
@@ -528,6 +587,13 @@ public class MainActivity extends Activity {
         }
     }
 
+
+    /*
+    Called to process key events. You can override this to intercept all key events before
+    they are dispatched to the window.
+    Be sure to call this implementation for key events that should be handled normally.
+     */
+    //key pressing events (the joystick buttons)
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         // do not call super if key event comes from a gamepad, otherwise the buttons can quit the app
@@ -541,7 +607,7 @@ public class MainActivity extends Activity {
         return super.dispatchKeyEvent(event);
     }
 
-    // this workaround is necessary because DPad buttons are not considered to be "Gamepad buttons"
+    //this workaround is necessary because DPad buttons are not considered to be "Gamepad buttons"
     private static boolean isJoystickButton(int keyCode) {
         switch (keyCode) {
             case KeyEvent.KEYCODE_DPAD_CENTER:
@@ -597,6 +663,7 @@ public class MainActivity extends Activity {
                     }
                 }
             }
+
             if (UsbManager.ACTION_USB_DEVICE_DETACHED.equals(action)) {
                 UsbDevice device = (UsbDevice) intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
                 if (device != null && UsbLinkAndroid.isUsbDevice(device, Crazyradio.CRADIO_VID, Crazyradio.CRADIO_PID)) {
@@ -609,6 +676,7 @@ public class MainActivity extends Activity {
                     }
                 }
             }
+
             if (UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(action)) {
                 UsbDevice device = (UsbDevice) intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
                 if (device != null && UsbLinkAndroid.isUsbDevice(device, Crazyradio.CRADIO_VID, Crazyradio.CRADIO_PID)) {
@@ -648,6 +716,7 @@ public class MainActivity extends Activity {
         }
     }
 
+    //some getters
     public MainPresenter getPresenter() {
         return mPresenter;
     }
@@ -674,9 +743,11 @@ public class MainActivity extends Activity {
         int batteryPercentage = (int) (normalizedBattery * 100);
         if (battery == -1f) {
             batteryPercentage = 0;
-        } else if (normalizedBattery < 0f && normalizedBattery > -1f) {
+        }
+        else if (normalizedBattery < 0f && normalizedBattery > -1f) {
             batteryPercentage = 0;
-        } else if (normalizedBattery > 1f) {
+        }
+        else if (normalizedBattery > 1f) {
             batteryPercentage = 100;
         }
         //TODO: FIXME
@@ -702,7 +773,7 @@ public class MainActivity extends Activity {
         return String.format(getResources().getString(identifier), o);
     }
 
-    public void showToastie(final String message) {
+    public void showToastie(final String message) { //this dude is funny
         runOnUiThread(new Runnable() {
             @Override
             public void run() {

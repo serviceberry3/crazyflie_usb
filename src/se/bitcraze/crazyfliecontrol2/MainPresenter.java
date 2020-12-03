@@ -31,6 +31,7 @@ public class MainPresenter {
 
     private static final String LOG_TAG = "Crazyflie-MainPresenter";
 
+    //the instance of MainActivity that this MainPresenter is linked to
     private MainActivity mainActivity;
 
     private Crazyflie mCrazyflie;
@@ -53,7 +54,9 @@ public class MainPresenter {
     private Thread mSendJoystickDataThread;
     private ConsoleListener mConsoleListener;
 
+    //constrctor
     public MainPresenter(MainActivity mainActivity) {
+
         this.mainActivity = mainActivity;
     }
 
@@ -75,7 +78,10 @@ public class MainPresenter {
                 mainActivity.setConnectionButtonConnectedBle();
                 // FIXME: Hack to circumvent BLE reconnect problem
                 mCrazyflie.startConnectionSetup_BLE();
-            } else {
+            }
+
+
+            else {
                 mainActivity.setConnectionButtonConnected();
             }
         }
@@ -223,6 +229,10 @@ public class MainPresenter {
             }
         });
         mSendJoystickDataThread.start();
+    }
+
+    public void connectWifiDirect() {
+
     }
 
     public void connectCrazyradio(int radioChannel, int radioDatarate, File mCacheDir) {

@@ -53,6 +53,8 @@ public class TouchController extends AbstractController {
         this.mJoystickViewRight = joystickviewRight;
         this.mJoystickViewLeft.setMovementRange(mMovementRange);
         this.mJoystickViewRight.setMovementRange(mMovementRange);
+
+
         updateAutoReturnMode();
     }
 

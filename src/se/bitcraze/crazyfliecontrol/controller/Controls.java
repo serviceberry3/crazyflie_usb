@@ -141,7 +141,10 @@ public class Controls {
             this.mMaxThrust = Integer.parseInt(mPreferences.getString(PreferencesActivity.KEY_PREF_MAX_THRUST, mMaxThrustDefaultValue));
             this.mMinThrust = Integer.parseInt(mPreferences.getString(PreferencesActivity.KEY_PREF_MIN_THRUST, mMinThrustDefaultValue));
             this.mXmode = mPreferences.getBoolean(PreferencesActivity.KEY_PREF_XMODE, false);
-        } else {
+        }
+
+
+        else {
             this.mMaxRollPitchAngle = Integer.parseInt(mMaxRollPitchAngleDefaultValue);
             this.mMaxYawAngle = Integer.parseInt(mMaxYawAngleDefaultValue);
             this.mMaxThrust = Integer.parseInt(mMaxThrustDefaultValue);
@@ -172,7 +175,9 @@ public class Controls {
         if (PreferencesActivity.KEY_PREF_ROLLTRIM.equals(prefKey)) {
             axisName = "Roll";
             axis = mRollTrim;
-        } else {
+        }
+
+        else {
             axisName = "Pitch";
             axis = mPitchTrim;
         }
@@ -217,6 +222,7 @@ public class Controls {
         return 1;
     }
 
+    //more getters and setters
     public float getDeadzone() {
         return mDeadzone;
     }
@@ -299,7 +305,6 @@ public class Controls {
         return mMinThrust;
     }
 
-    // TODO: move methods to Controls?
     public float getRollPitchFactor() {
         return getMaxRollPitchAngle();
     }
