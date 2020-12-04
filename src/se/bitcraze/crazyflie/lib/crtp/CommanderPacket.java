@@ -56,7 +56,9 @@ public class CommanderPacket extends CrtpPacket {
             //offset by 45 degrees
             this.mRoll = 0.707f * (roll - pitch);
             this.mPitch = 0.707f * (roll + pitch);
-        } else {
+        }
+
+        else {
             this.mRoll = roll;
             this.mPitch = pitch;
         }

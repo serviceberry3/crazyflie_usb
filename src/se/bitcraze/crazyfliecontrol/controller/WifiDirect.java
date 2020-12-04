@@ -61,7 +61,7 @@ public class WifiDirect extends CrtpDriver {
 
     private Thread mRadioDriverThread;
 
-    private final Logger mLogger = LoggerFactory.getLogger("BLELink");
+    private final Logger mLogger = LoggerFactory.getLogger("WifiDirectLogger");
 
     private static final String TAG = "WifiDirect";
     private MainActivity mContext;
@@ -277,20 +277,19 @@ public class WifiDirect extends CrtpDriver {
     //MAND METHODS FROM CRTPDRIVER-----------------------------------------------------------------------------------------------------------------------------------------
     @Override
     public void connect() throws IOException {
+        //Show connecting toast
         notifyConnectionRequested();
 
-        // Launch the comm thread
-        startSendReceiveThread();
+        //Launch the comm thread
+        startSendReceiveThread(); //CAUSING MAIN THD TO BLOCK
     }
 
     @Override
     public void disconnect() {
-        mLogger.debug("disconnect()");
+        mLogger.debug("WifiDirect: disconnect()");
 
-
-        //Stop the comm thread
+        //Stop the comm thread, if it's up
         stopSendReceiveThread();
-
 
         //Avoid NPE because packets are still processed
         try {
@@ -301,7 +300,7 @@ public class WifiDirect extends CrtpDriver {
             mLogger.error("Interrupted during disconnect: " + e.getMessage());
         }
 
-
+        //just do some UI and log stuff for the disconnect
         notifyDisconnected();
     }
 
@@ -416,6 +415,7 @@ public class WifiDirect extends CrtpDriver {
             //self._thread = _RadioDriverThread(self.cradio, self.in_queue, self.out_queue, link_quality_callback, link_error_callback)
             WifiDirect.RadioDriverThread rDT = new WifiDirect.RadioDriverThread();
 
+            //run on separate (non-UI) thread to avoid blocking UI
             mRadioDriverThread = new Thread(rDT);
             mRadioDriverThread.start();
         }
@@ -486,7 +486,8 @@ public class WifiDirect extends CrtpDriver {
 
                     //Analyze the data packet returned by the onboard Pixel (client) after the send. If there was no acknowledgment, something's wrong with comms
                     if (ackStatus == null) {
-                        notifyConnectionLost("Dongle communication error (ackStatus == null)");
+                        //No acknowledgement returned. Log stuff and disconnect everything
+                        notifyConnectionLost("Dongle communication error (ackStatus == null)"); //calls disconnect() on MainPresenter instance
                         mLogger.warn("Dongle communication error (ackStatus == null)");
                         continue;
                     }
@@ -586,7 +587,7 @@ public class WifiDirect extends CrtpDriver {
         RadioAck ackIn = null;
         byte[] data = new byte[33]; // 33?
 
-        Log.i(TAG, String.format("Sending packet of length %d", dataOut.length));
+       // Log.i(TAG, String.format("Sending packet of length %d", dataOut.length));
 
 
         //mUsbInterface.sendBulkTransfer(dataOut, data); //TODO: change to send the transfer over WIFI DIRECT SOCKET

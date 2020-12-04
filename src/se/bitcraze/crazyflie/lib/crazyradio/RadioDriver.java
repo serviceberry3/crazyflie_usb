@@ -84,7 +84,9 @@ public class RadioDriver extends CrtpDriver {
             notifyConnectionRequested();
 //            try {
 //                mUsbInterface.initDevice(Crazyradio.CRADIO_VID, Crazyradio.CRADIO_PID);
-//            } catch (IOException e) {
+//            }
+//
+//            catch (IOException e) {
 //                throw new IOException("Make sure that the Crazyradio (PA) is connected.");
 //            }
             this.mCradio = new Crazyradio(mUsbInterface);
@@ -104,7 +106,10 @@ public class RadioDriver extends CrtpDriver {
 
         if (this.mCradio.getVersion() >= 0.4) {
             this.mCradio.setArc(10);
-        } else {
+        }
+
+
+        else {
             mLogger.warn("Radio version <0.4 will be obsolete soon!");
         }
 
@@ -118,7 +123,7 @@ public class RadioDriver extends CrtpDriver {
             self.cradio.set_address(new_addr)
          */
 
-        // Launch the comm thread
+        //Launch the comm thread
         startSendReceiveThread();
     }
 

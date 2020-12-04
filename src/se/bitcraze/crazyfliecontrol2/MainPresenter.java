@@ -119,13 +119,19 @@ public class MainPresenter {
             }
 
             //start sending data from joystick
+            Log.i(LOG_TAG, "Starting sendJoystickDataThread");
             startSendJoystickDataThread();
         }
 
         @Override
         public void connectionLost(final String msg) {
+            //show message as Toast on UI thread
             mainActivity.showToastie(msg);
+
+            //change the look of the connect button
             mainActivity.setConnectionButtonDisconnected();
+
+            //disconnect
             disconnect();
         }
 
@@ -137,6 +143,7 @@ public class MainPresenter {
 
         @Override
         public void disconnected() {
+            //just do some UI stuff
             mainActivity.showToastie("Disconnected");
             mainActivity.setConnectionButtonDisconnected();
             mainActivity.disableButtonsAndResetBatteryLevel();
@@ -209,6 +216,7 @@ public class MainPresenter {
      * Start thread to periodically send commands containing the user input
      */
     private void startSendJoystickDataThread() {
+        //instantiate the thread
         mSendJoystickDataThread = new Thread(new Runnable() {
             @Override
             public void run() {
@@ -237,11 +245,16 @@ public class MainPresenter {
                         sendPacket(new ZDistancePacket(roll, pitch, yaw, targetHeight));
                     }
 
-                    //*****************************8
+
+
+                    //****************************************************************************************************
                     //DEFAULT. Send a CommanderPacket to the drone with the requested movement data
                     else {
+                        Log.i(LOG_TAG, String.format("sending CommanderPacket to drone with roll %f, pitch %f, yaw %f, thrustAbs %f",
+                                roll, pitch, yaw, thrustAbsolute));
                         sendPacket(new CommanderPacket(roll, pitch, yaw, (char) thrustAbsolute, xmode));
                     }
+                    //****************************************************************************************************8
 
                     try {
                         Thread.sleep(20);
@@ -255,7 +268,7 @@ public class MainPresenter {
             }
         });
 
-
+        //start the thread
         mSendJoystickDataThread.start();
     }
 
@@ -264,17 +277,14 @@ public class MainPresenter {
     }
 
     public void connectToPixel(File mCacheDir) {
-        //Pixel has now been found. Request p2p connection with it
-        wifiDirectDriver.connectTo(wifiDirectDriver.pixelDev);
-
-        Log.i(LOG_TAG, "Connection finished, instantiating Crazyflie");
-
 
         //add listener for connection status
-        mDriver.addConnectionListener(crazyflieConnectionAdapter);
+        wifiDirectDriver.addConnectionListener(crazyflieConnectionAdapter);
 
         mCrazyflie = new Crazyflie(wifiDirectDriver, mCacheDir);
 
+        //Pixel has now been found. Request p2p connection with it
+        wifiDirectDriver.connectTo(wifiDirectDriver.pixelDev);
 
 
         //call connect on the driver
@@ -361,21 +371,26 @@ public class MainPresenter {
     }
 
     public void disconnect() {
-        Log.d(LOG_TAG, "disconnect()");
-        // kill sendJoystickDataThread first to avoid NPE
+        Log.d(LOG_TAG, "MainPresenter: disconnect()");
+
+
+        //kill sendJoystickDataThread first to avoid NPE
         if (mSendJoystickDataThread != null) {
             mSendJoystickDataThread.interrupt();
             mSendJoystickDataThread = null;
         }
 
+        //
         if (mCrazyflie != null) {
             mCrazyflie.removeDataListener(mConsoleListener);
             mCrazyflie.disconnect();
             mCrazyflie = null;
         }
 
+        //remove connectionListener from the driver
         if (mDriver != null) {
-            mDriver.removeConnectionListener(crazyflieConnectionAdapter);
+            //mDriver.removeConnectionListener(crazyflieConnectionAdapter);
+            wifiDirectDriver.removeConnectionListener(crazyflieConnectionAdapter);
         }
 
         // link quality is not available when there is no active connection

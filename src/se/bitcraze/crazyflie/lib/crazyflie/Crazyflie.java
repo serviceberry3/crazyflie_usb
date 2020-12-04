@@ -117,7 +117,7 @@ public class Crazyflie {
                 }
                 ((RadioDriver) mDriver).setConnectionData(mConnectionData);
             }
-            mDriver.connect();
+            mDriver.connect(); ****important call
         }
 
         catch (IOException | IllegalArgumentException ioe) {
@@ -126,8 +126,11 @@ public class Crazyflie {
             disconnect();
         }*/
 
+
+        //CAUSES BLOCK ON MAIN THRD
+        //WifiDirect version: replicate only the driver.connect() call, ignoring radio connection data
         try {
-            mDriver.connect();
+            mDriver.connect(); //startSendReceiveThread() should have been called on the driver here
         }
 
         catch (IOException ioe) {
@@ -137,7 +140,7 @@ public class Crazyflie {
             disconnect();
         }
 
-
+        /*
         //instantiate and start IncomingPacketHandler on new Thread
         if (mIncomingPacketHandlerThread == null) {
             IncomingPacketHandler iph = new IncomingPacketHandler();
@@ -150,25 +153,31 @@ public class Crazyflie {
             ResendQueueHandler rqh = new ResendQueueHandler();
             mResendQueueHandlerThread = new Thread(rqh);
             mResendQueueHandlerThread.start();
-        }
+        }*/
     }
 
     public void disconnect() {
-        mLogger.debug("disconnect()");
-        if (mState != State.DISCONNECTED) {
+        mLogger.debug("Crazyflie: disconnect()");
 
+
+        if (mState != State.DISCONNECTED) {
             if (mDriver.isConnected()) {
                 //Send commander packet with all values set to 0 before closing the connection
+                Log.i("CRFLIE", "Sending shutdown commander packet to drone...");
                 sendPacket(new CommanderPacket(0, 0, 0, (char) 0));
             }
+
+            //call disconnect on WifiDirect
             mDriver.disconnect();
 
-            if(mIncomingPacketHandlerThread != null) {
+            if (mIncomingPacketHandlerThread != null) {
                 mIncomingPacketHandlerThread.interrupt();
             }
-            if(mResendQueueHandlerThread != null) {
+            if (mResendQueueHandlerThread != null) {
                 mResendQueueHandlerThread.interrupt();
             }
+
+            //switch state
             mState = State.DISCONNECTED;
         }
     }
