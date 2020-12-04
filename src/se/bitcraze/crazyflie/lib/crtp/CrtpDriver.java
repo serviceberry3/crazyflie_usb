@@ -112,7 +112,7 @@ public abstract class CrtpDriver {
     /**
      * Notify all registered listeners about a finished setup.
      */
-    public void notifySetupFinished(){
+    public void notifySetupFinished() {
         for (ConnectionListener cl : this.mConnectionListeners) {
             cl.setupFinished();
         }

@@ -254,7 +254,7 @@ public class GamepadController extends AbstractController {
     }
 
     /*
-     * Absolute thrust value (gets send to the Crazyflie)
+     * Absolute thrust value (gets sent to the Crazyflie)
      */
     public float getThrustAbsolute() {
         float thrust = getThrust();

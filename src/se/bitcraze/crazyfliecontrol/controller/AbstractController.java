@@ -83,7 +83,7 @@ public abstract class AbstractController implements IController {
     }
 
     /*
-     * Absolute thrust value (gets send to the Crazyflie)
+     * Absolute thrust value (gets sent to the Crazyflie)
      */
     public float getThrustAbsolute() {
         float thrust = getThrust();

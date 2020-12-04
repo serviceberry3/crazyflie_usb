@@ -45,7 +45,7 @@ import android.hardware.usb.UsbManager;
 import android.util.Log;
 import se.bitcraze.crazyflie.lib.usb.CrazyUsbInterface;
 
-public class UsbLinkAndroid implements CrazyUsbInterface{
+public class UsbLinkAndroid implements CrazyUsbInterface {
 
     private static final String LOG_TAG = "UsbLinkAndroid";
 

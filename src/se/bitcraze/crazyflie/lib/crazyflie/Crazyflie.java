@@ -27,6 +27,8 @@
 
 package se.bitcraze.crazyflie.lib.crazyflie;
 
+import android.util.Log;
+
 import java.io.File;
 import java.io.IOException;
 import java.util.Set;
@@ -124,6 +126,17 @@ public class Crazyflie {
             disconnect();
         }*/
 
+        try {
+            mDriver.connect();
+        }
+
+        catch (IOException ioe) {
+            ioe.printStackTrace();
+            mLogger.debug(ioe.getMessage());
+            //notifyConnectionFailed("Connection failed: " + ioe.getMessage());
+            disconnect();
+        }
+
 
         //instantiate and start IncomingPacketHandler on new Thread
         if (mIncomingPacketHandlerThread == null) {
@@ -175,20 +188,26 @@ public class Crazyflie {
      * @param packet packet to send to the Crazyflie
      */
     // def send_packet(self, pk, expected_reply=(), resend=False):
-    public void sendPacket(CrtpPacket packet){
+    public void sendPacket(CrtpPacket packet) {
         if (mDriver.isConnected()) {
             if (packet == null) {
                 mLogger.warn("Packet is null.");
                 return;
             }
+
+            Log.i("CRAZYFLIe", "sending packet...");
+            //send the packet to the CrazyFlie
             mDriver.sendPacket(packet);
+
 
             if (packet.getExpectedReply() != null && packet.getExpectedReply().length > 0) {
                 //add packet to resend queue
                 if(!mResendQueue.contains(packet)) {
                     mResendQueue.add(packet);
-                } else {
-                    mLogger.warn("Packet already exists in Queue.");
+                }
+
+                else {
+                    mLogger.warn("Packet already exists in ResendQueue.");
                 }
             }
         }
@@ -203,7 +222,7 @@ public class Crazyflie {
     private void checkReceivedPackets(CrtpPacket packet) {
         // compare received packet with expectedReplies in resend queue
         for(CrtpPacket resendQueuePacket : mResendQueue) {
-            if(isPacketMatchingExpectedReply(resendQueuePacket, packet)) {
+            if (isPacketMatchingExpectedReply(resendQueuePacket, packet)) {
                 mResendQueue.remove(resendQueuePacket);
                 // mLogger.debug("QUEUE REMOVE: " + resendQueuePacket);
                 break;
@@ -226,9 +245,14 @@ public class Crazyflie {
 
         public void run() {
             mLogger.debug("ResendQueueHandlerThread was started.");
-            while(true) {
+
+            //infinitely check to see if there's anything in the resend queue and resend it
+            while (true) {
                 if (!mResendQueue.isEmpty()) {
+                    //remove a packet from the resent FIFO queue
                     CrtpPacket resendPacket = mResendQueue.poll();
+
+                    //resend the removed packet
                     if (resendPacket != null) {
                         mLogger.debug("RESEND: {} ID: {}", resendPacket, resendPacket.getPayload()[0]);
                         sendPacket(resendPacket);
@@ -253,6 +277,7 @@ public class Crazyflie {
      * Called when first packet arrives from Crazyflie.
      * This is used to determine if we are connected to something that is answering.
      *
+     *
      * @param packet initial packet
      */
     private void checkForInitialPacketCallback(CrtpPacket packet) {
@@ -264,6 +289,8 @@ public class Crazyflie {
             //self.link_established.call(self.link_uri)
             //FIXME: Crazyflie should not call mDriver.notifyConnected()
             this.mDriver.notifyConnected();
+
+            //start the setup, which in turn starts the joystick data sending thread in MainPresenter
             startConnectionSetup();
         }
         //self.packet_received.remove_callback(self._check_for_initial_packet_cb)
@@ -307,6 +334,10 @@ public class Crazyflie {
                 //TODO: should be set only after log, param, mems are all updated
                 mState = State.SETUP_FINISHED;
                 //TODO: fix hacky-di-hack
+
+
+                Log.i("CRAZYFLIE", "tocFetchFinished calling setup finished");
+                //setup finished callback of the driver's plugged ConnectionAdapter. starts the joystick data sending thread
                 mDriver.notifySetupFinished();
             }
         };
@@ -322,7 +353,9 @@ public class Crazyflie {
         //mLog.refreshToc(self._log_toc_updated_cb, self._toc_cache);
         if (mDriver instanceof RadioDriver) {
             mLogg.refreshToc(loggTocFetchFinishedListener, mTocCache);
-        } else {
+        }
+
+        else {
             //TODO: shortcut for BLELink
             mState = State.SETUP_FINISHED; //important, otherwise BLE keeps trying to reconnect
             mDriver.notifySetupFinished();
@@ -409,7 +442,7 @@ public class Crazyflie {
 
             //as long as the Thread isn't interrupted
             while(!Thread.currentThread().isInterrupted()) {
-                //receive a packet from the driver
+                //receive an ack packet from the driver (the oldest packet that was received from the drone)
                 CrtpPacket packet = getDriver().receivePacket(1);
 
                 //make sure packet is non-null
@@ -417,6 +450,7 @@ public class Crazyflie {
                     //All-packet callbacks
                     //self.cf.packet_received.call(pk)
 
+                    //let's see if this is the first packet arriving from the drone
                     checkForInitialPacketCallback(packet);
 
                     checkReceivedPackets(packet);

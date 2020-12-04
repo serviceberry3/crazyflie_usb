@@ -45,13 +45,13 @@ public class Controls {
     private MainActivity mActivity;
     private SharedPreferences mPreferences;
 
-    // Raw input values
+    //Raw input values
     private float mRight_analog_x;
     private float mRight_analog_y;
     private float mLeft_analog_x;
     private float mLeft_analog_y;
 
-    // Trim values
+    //Trim values
     private static final float TRIM_MAX = 0.5f;
     private static final float TRIM_INCREMENTS = 0.02f;
     private float mRollTrim;
@@ -193,11 +193,14 @@ public class Controls {
 
         if (PreferencesActivity.KEY_PREF_ROLLTRIM.equals(prefKey)) {
             mRollTrim = axis;
-        } else {
+        }
+
+        else {
             mPitchTrim = axis;
         }
     }
 
+    //set a preference for controls
     private void setPreference(String pKey, String pDefaultValue) {
         SharedPreferences.Editor editor = mPreferences.edit();
         editor.putString(pKey, pDefaultValue);

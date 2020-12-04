@@ -78,7 +78,9 @@ public class RadioDriver extends CrtpDriver {
         if (this.mConnectionData == null) {
             throw new IllegalStateException("ConnectionData must be set before attempting to connect to Crazyradio.");
         }
-        if(mCradio == null) {
+
+        //if we don't have a Crazyradio object yet, create one
+        if (mCradio == null) {
             notifyConnectionRequested();
 //            try {
 //                mUsbInterface.initDevice(Crazyradio.CRADIO_VID, Crazyradio.CRADIO_PID);
@@ -86,7 +88,10 @@ public class RadioDriver extends CrtpDriver {
 //                throw new IOException("Make sure that the Crazyradio (PA) is connected.");
 //            }
             this.mCradio = new Crazyradio(mUsbInterface);
-        } else {
+        }
+
+
+        else {
             mLogger.error("Crazyradio already open");
         }
 
@@ -134,7 +139,9 @@ public class RadioDriver extends CrtpDriver {
     public CrtpPacket receivePacket(int time) {
         try {
             return mInQueue.poll((long) time, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
+        }
+
+        catch (InterruptedException e) {
             mLogger.error("InterruptedException: " + e.getMessage());
             return null;
         }
@@ -152,8 +159,7 @@ public class RadioDriver extends CrtpDriver {
             return;
         }
 
-        //TODO: does it make sense to be able to queue packets even though
-        //the connection is not established yet?
+        //TODO: does it make sense to be able to queue packets even though the connection is not established yet?
 
         /*
         try:
@@ -163,10 +169,14 @@ public class RadioDriver extends CrtpDriver {
                 self.link_error_callback("RadioDriver: Could not send packet to copter")
         */
 
-        // this.mOutQueue.addLast(packet);
+        //this.mOutQueue.addLast(packet);
+
+
         try {
             this.mOutQueue.put(packet);
-        } catch (InterruptedException e) {
+        }
+
+        catch (InterruptedException e) {
             mLogger.error("InterruptedException: " + e.getMessage());
         }
     }
@@ -333,7 +343,7 @@ public class RadioDriver extends CrtpDriver {
             double waitTime = 0;
             int emptyCtr = 0;
 
-            while(mCradio != null && !Thread.currentThread().isInterrupted()) {
+            while (mCradio != null && !Thread.currentThread().isInterrupted()) {
                 try {
 
                     /*
@@ -378,13 +388,17 @@ public class RadioDriver extends CrtpDriver {
 
                         waitTime = 0;
                         emptyCtr = 0;
-                    } else {
+                    }
+
+                    else {
                         emptyCtr += 1;
                         if (emptyCtr > 10) {
                             emptyCtr = 10;
                             // Relaxation time if the last 10 packets where empty
                             waitTime = 0.01;
-                        } else {
+                        }
+
+                        else {
                             waitTime = 0;
                         }
                     }

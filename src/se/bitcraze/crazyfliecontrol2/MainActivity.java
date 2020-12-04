@@ -165,6 +165,7 @@ public class MainActivity extends Activity {
         setBatteryLevel(-1.0f);
         setLinkQualityText("N/A");
 
+
         //instantiate a Controls
         mControls = new Controls(this, mPreferences);
         mControls.setDefaultPreferenceValues(getResources());
@@ -274,9 +275,11 @@ public class MainActivity extends Activity {
 
     private void checkConsole() {
         boolean showConsole = mPreferences.getBoolean(PreferencesActivity.KEY_PREF_SHOW_CONSOLE_BOOL, false);
+
         if (showConsole) {
             mConsoleScrollView.setVisibility(View.VISIBLE);
-        } else {
+        }
+        else {
             mConsoleScrollView.setVisibility(View.INVISIBLE);
         }
     }
@@ -475,6 +478,7 @@ public class MainActivity extends Activity {
 
 
         resetInputMethod();
+
         checkScreenLock();
         checkConsole();
 
@@ -610,7 +614,9 @@ public class MainActivity extends Activity {
         getWindow().getDecorView().setSystemUiVisibility(newUiOptions);
     }
 
+
     //TODO: fix indirection
+    //Update the text for the flight data info
     public void updateFlightData() {
         mFlightDataView.updateFlightData(mController.getPitch(), mController.getRoll(), mController.getThrust(), mController.getYaw());
     }
@@ -638,10 +644,13 @@ public class MainActivity extends Activity {
     public boolean dispatchGenericMotionEvent(MotionEvent event) {
         // Check that the event came from a joystick since a generic motion event could be almost anything.
         if ((event.getSource() & InputDevice.SOURCE_CLASS_JOYSTICK) != 0 && event.getAction() == MotionEvent.ACTION_MOVE && mController instanceof GamepadController) {
+            Log.i(LOG_TAG, "motion event handling");
             mGamepadController.dealWithMotionEvent(event);
             updateFlightData();
             return true;
-        } else {
+        }
+
+        else {
             return super.dispatchGenericMotionEvent(event);
         }
     }
@@ -657,6 +666,8 @@ public class MainActivity extends Activity {
     public boolean dispatchKeyEvent(KeyEvent event) {
         // do not call super if key event comes from a gamepad, otherwise the buttons can quit the app
         if (isJoystickButton(event.getKeyCode()) && mController instanceof GamepadController) {
+            Log.i(LOG_TAG, "key event handling");
+
             mGamepadController.dealWithKeyEvent(event);
             // exception for OUYA controllers
             if (!Build.MODEL.toUpperCase(Locale.getDefault()).contains("OUYA")) {
@@ -679,16 +690,27 @@ public class MainActivity extends Activity {
         }
     }
 
+
+    //****INPUT METHOD INIT****
     private void resetInputMethod() {
+        //temp disable the touch controller
         mController.disable();
+
+        //update flight data text
         updateFlightData();
+
+
         switch (mControls.getControllerType()) {
             case 0:
                 // Use GyroscopeController if activated in the preferences
                 if (mControls.isUseGyro()) {
                     mController = new GyroscopeController(mControls, this, mJoystickViewLeft, mJoystickViewRight);
-                } else {
-                    // TODO: reuse existing touch controller?
+                }
+
+
+                //otherwise let's create a new touchcontroller
+                else {
+                    // TODO: reuse existing touch controller? -- good point, we already have one
                     mController = new TouchController(mControls, this, mJoystickViewLeft, mJoystickViewRight);
                 }
                 break;

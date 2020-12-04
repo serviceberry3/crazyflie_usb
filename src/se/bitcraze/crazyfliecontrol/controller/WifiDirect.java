@@ -59,6 +59,8 @@ import se.bitcraze.crazyfliecontrol2.R;
 
 public class WifiDirect extends CrtpDriver {
 
+    private Thread mRadioDriverThread;
+
     private final Logger mLogger = LoggerFactory.getLogger("BLELink");
 
     private static final String TAG = "WifiDirect";
@@ -82,15 +84,19 @@ public class WifiDirect extends CrtpDriver {
     public WifiP2pManager wifiP2pManager;
     public WifiP2pManager.Channel wifiDirectChannel;
 
-    private final BlockingQueue<CrtpPacket> mInQueue;
     private boolean mWriteWithAnswer;
+
+    private final BlockingQueue<CrtpPacket> mOutQueue = new LinkedBlockingQueue<CrtpPacket>();
+    //TODO: Limit size of out queue to avoid "ReadBack" effect?
+    private final BlockingQueue<CrtpPacket> mInQueue = new LinkedBlockingQueue<CrtpPacket>();
+
 
     public volatile boolean connected = false;
 
     public WifiDirect(MainActivity activity) {
         this.mContext = activity;
 
-        this.mInQueue = new LinkedBlockingQueue<CrtpPacket>();
+        //this.mInQueue = new LinkedBlockingQueue<CrtpPacket>();
 
         //initialize the p2p channel
         init();
@@ -271,24 +277,31 @@ public class WifiDirect extends CrtpDriver {
     //MAND METHODS FROM CRTPDRIVER-----------------------------------------------------------------------------------------------------------------------------------------
     @Override
     public void connect() throws IOException {
+        notifyConnectionRequested();
 
+        // Launch the comm thread
+        startSendReceiveThread();
     }
 
     @Override
     public void disconnect() {
         mLogger.debug("disconnect()");
-        // Stop the comm thread
+
+
+        //Stop the comm thread
         stopSendReceiveThread();
-        // Avoid NPE because packets are still processed
+
+
+        //Avoid NPE because packets are still processed
         try {
             Thread.sleep(100);
-        } catch (InterruptedException e) {
+        }
+
+        catch (InterruptedException e) {
             mLogger.error("Interrupted during disconnect: " + e.getMessage());
         }
-        if(this.mCradio != null) {
-            this.mCradio.disconnect();
-            this.mCradio = null;
-        }
+
+
         notifyDisconnected();
     }
 
@@ -301,12 +314,7 @@ public class WifiDirect extends CrtpDriver {
     int ctr = 0;
     @Override
     public void sendPacket(CrtpPacket packet) {
-        if (this.mCradio == null) {
-            return;
-        }
-
-        //TODO: does it make sense to be able to queue packets even though
-        //the connection is not established yet?
+        //TODO: does it make sense to be able to queue packets even though the connection is not established yet?
 
         /*
         try:
@@ -316,17 +324,23 @@ public class WifiDirect extends CrtpDriver {
                 self.link_error_callback("RadioDriver: Could not send packet to copter")
         */
 
-        // this.mOutQueue.addLast(packet);
+        //this.mOutQueue.addLast(packet);
+
+        //add the passed packet to the out FIFO queue
         try {
             this.mOutQueue.put(packet);
-        } catch (InterruptedException e) {
-            mLogger.error("InterruptedException: " + e.getMessage());
         }
 
+        catch (InterruptedException e) {
+            mLogger.error("InterruptedException: " + e.getMessage());
+        }
     }
 
     @Override
-    public CrtpPacket receivePacket(int wait) {
+    public CrtpPacket receivePacket(int time) {
+        //retrieves and removes head of FIFO queue, or returns NULL if time runs out b4 an item is avail,
+        //waiting up to the specified wait time if necessary for an element to become available
+        //so here we're returning the first-in ack packet that's in the queue (that was received back from the drone)
         try {
             return mInQueue.poll((long) time, TimeUnit.SECONDS);
         }
@@ -339,14 +353,13 @@ public class WifiDirect extends CrtpDriver {
     //END MAND METHODS FROM CRTPDRIVER..........................................................................................................................................
 
 
-
+    /*
     public List<ConnectionData> scanInterface() {
+
         return scanInterface(mCradio, mUsbInterface);
     }
 
-    /**
-     * Scan interface for Crazyflies
-     */
+    //scan interface for crazyflies
     private static List<ConnectionData> scanInterface(Crazyradio crazyRadio, CrazyUsbInterface crazyUsbInterface) {
         List<ConnectionData> connectionDataList = new ArrayList<ConnectionData>();
 
@@ -394,60 +407,30 @@ public class WifiDirect extends CrtpDriver {
             mCradio = new Crazyradio(mUsbInterface);
         }
         return mCradio.scanSelected(connectionData.getChannel(), connectionData.getDataRate(), packet);
-    }
+    }*/
 
-    public boolean setBootloaderAddress(byte[] newAddress) {
-        if (newAddress.length != 5) {
-            mLogger.error("Radio address should be 5 bytes long");
-            return false;
-        }
-        // self.link.pause()
-        stopSendReceiveThread();
 
-        int SET_BOOTLOADER_ADDRESS = 0x11; // Only implemented on Crazyflie version 0x00
-        //TODO: is there a more elegant way to do this?
-        //pkdata = (0xFF, 0xFF, 0x11) + tuple(new_address)
-        byte[] pkData = new byte[newAddress.length + 3];
-        pkData[0] = (byte) 0xFF;
-        pkData[1] = (byte) 0xFF;
-        pkData[2] = (byte) SET_BOOTLOADER_ADDRESS;
-        System.arraycopy(newAddress, 0, pkData, 3, newAddress.length);
-
-        for (int i = 0; i < 10; i++) {
-            mLogger.debug("Trying to set new radio address");
-            //self.link.cradio.set_address((0xE7,) * 5)
-            mCradio.setAddress(new byte[]{(byte) 0xE7, (byte) 0xE7, (byte) 0xE7, (byte) 0xE7, (byte) 0xE7});
-            mCradio.sendPacket(pkData);
-            //self.link.cradio.set_address(tuple(new_address))
-            mCradio.setAddress(newAddress);
-            //if self.link.cradio.send_packet((0xff,)).ack:
-            RadioAck ack = mCradio.sendPacket(new byte[] {(byte) 0xFF});
-            if (ack != null) {
-                mLogger.info("Bootloader set to radio address " + Utilities.getHexString(newAddress));
-                startSendReceiveThread();
-                return true;
-            }
-        }
-        //this.mDriver.restart();
-        startSendReceiveThread();
-        return false;
-    }
-
+    //instantiate and start a new Thread that receives and sends packets
     private void startSendReceiveThread() {
         if (mRadioDriverThread == null) {
             //self._thread = _RadioDriverThread(self.cradio, self.in_queue, self.out_queue, link_quality_callback, link_error_callback)
-            RadioDriver.RadioDriverThread rDT = new RadioDriver.RadioDriverThread();
+            WifiDirect.RadioDriverThread rDT = new WifiDirect.RadioDriverThread();
+
             mRadioDriverThread = new Thread(rDT);
             mRadioDriverThread.start();
         }
     }
 
+    //stop the sender/receiver Thread by calling interrupt() to end the loop
     private void stopSendReceiveThread() {
         if (this.mRadioDriverThread != null) {
             this.mRadioDriverThread.interrupt();
+
+            //set the Thread to null
             this.mRadioDriverThread = null;
         }
     }
+
 
     /**
      * Radio link receiver thread is used to read data from the Crazyradio USB driver.
@@ -456,6 +439,7 @@ public class WifiDirect extends CrtpDriver {
 
         final Logger mLogger = LoggerFactory.getLogger(this.getClass().getSimpleName());
 
+        //how many times to retry sending a packet and get back .isAck() as false before we disconnect
         private final static int RETRYCOUNT_BEFORE_DISCONNECT = 10;
         private int mRetryBeforeDisconnect;
 
@@ -466,6 +450,8 @@ public class WifiDirect extends CrtpDriver {
             this.mRetryBeforeDisconnect = RETRYCOUNT_BEFORE_DISCONNECT;
         }
 
+
+
         /**
          * Run the receiver thread
          *
@@ -473,12 +459,15 @@ public class WifiDirect extends CrtpDriver {
          * @see java.lang.Runnable#run()
          */
         public void run() {
+            //set dataOut byte array to null packet to start, which is just 0xff
             byte[] dataOut = Crazyradio.NULL_PACKET;
 
             double waitTime = 0;
             int emptyCtr = 0;
 
-            while(mCradio != null && !Thread.currentThread().isInterrupted()) {
+
+            //as long as the Thread isn't interrupted. (Basically runs infinitely)
+            while (!Thread.currentThread().isInterrupted()) {
                 try {
 
                     /*
@@ -491,9 +480,11 @@ public class WifiDirect extends CrtpDriver {
                                                  "Exception:%s\n\n%s" % (e,
                                                  traceback.format_exc()))
                     */
-                    RadioAck ackStatus = mCradio.sendPacket(dataOut);
 
-                    // Analyze the data packet
+
+                    RadioAck ackStatus = sendPacketHelper(dataOut);                       //TODO: implement new packet sender for WIFI DIRECT SOCKET
+
+                    //Analyze the data packet returned by the onboard Pixel (client) after the send. If there was no acknowledgment, something's wrong with comms
                     if (ackStatus == null) {
                         notifyConnectionLost("Dongle communication error (ackStatus == null)");
                         mLogger.warn("Dongle communication error (ackStatus == null)");
@@ -502,48 +493,77 @@ public class WifiDirect extends CrtpDriver {
 
                     notifyLinkQualityUpdated((10 - ackStatus.getRetry()) * 10);
 
-                    // If no copter, retry
+                    //If no copter, retry
                     //TODO: how is this actually possible?
+
+                    //try sending again
                     if (!ackStatus.isAck()) {
                         this.mRetryBeforeDisconnect--;
                         if (this.mRetryBeforeDisconnect == 0) {
                             notifyConnectionLost("Too many packets lost");
                             mLogger.warn("Too many packets lost");
                         }
+
                         continue;
                     }
+                    //if we made it here, ackStatus.isAck() was true, so copter in range
+
                     this.mRetryBeforeDisconnect = RETRYCOUNT_BEFORE_DISCONNECT;
 
+                    //get the payload
                     byte[] data = ackStatus.getData();
 
-                    // if there is a copter in range, the packet is analyzed and the next packet to send is prepared
+
+                    //If there is a copter in range (ack had a payload), the incoming ack payload is analyzed and the next packet to send is prepared
                     if (data != null && data.length > 0) {
+                        //create a packet from the ackStatus data payload
                         CrtpPacket inPacket = new CrtpPacket(data);
+
+                        //put the packet on the IN blocking queue
                         mInQueue.put(inPacket);
 
                         waitTime = 0;
                         emptyCtr = 0;
-                    } else {
+                    }
+
+
+                    //otherwise we got an empty payload in the ack
+                    else {
+                        //increment empty packet counter
                         emptyCtr += 1;
+
                         if (emptyCtr > 10) {
                             emptyCtr = 10;
-                            // Relaxation time if the last 10 packets where empty
+                            //Relaxation time if the last 10 packets were empty
                             waitTime = 0.01;
-                        } else {
+                        }
+
+                        //otherwise no waiting for the queue polling, we can't relax it
+                        else {
                             waitTime = 0;
                         }
                     }
 
-                    // get the next packet to send after relaxation (wait 10ms)
-                    CrtpPacket outPacket = mOutQueue.poll((long) waitTime, TimeUnit.SECONDS);
+                    //get the next packet to send after relaxation (wait 10ms)
+                    CrtpPacket outPacket = mOutQueue.poll((long) waitTime, TimeUnit.SECONDS); //retrieves and removes head of FIFO queue, or returns NULL if time runs out b4 an item is avail
+                    //waiting up to the specified wait time if necessary for an element to become available
 
+                    //if we got something from the queue
                     if (outPacket != null) {
+                        //convert the CRTP packet to array of bytes
                         dataOut = outPacket.toByteArray();
-                    } else {
+                    }
+
+                    //otherwise set out to 0xff again
+                    else {
                         dataOut = Crazyradio.NULL_PACKET;
                     }
-//                    Thread.sleep(10);
-                } catch (InterruptedException e) {
+                    //Thread.sleep(10);
+                }
+
+
+                //if we called to stop the Thread
+                catch (InterruptedException e) {
                     mLogger.debug("RadioDriverThread was interrupted.");
                     notifyLinkQualityUpdated(0);
                     break;
@@ -555,7 +575,71 @@ public class WifiDirect extends CrtpDriver {
 
 
 
+    /**
+     * Send a packet and receive the ACKNOWLEDGEMENT signal from the radio dongle (back from the drone).
+     * The ack contains information about the packet transmission
+     * and a data payload if the ack packet contained any
+     *
+     * @param dataOut bytes to send
+     */
+    public RadioAck sendPacketHelper(byte[] dataOut) { //was sendPacket
+        RadioAck ackIn = null;
+        byte[] data = new byte[33]; // 33?
 
+        Log.i(TAG, String.format("Sending packet of length %d", dataOut.length));
+
+
+        //mUsbInterface.sendBulkTransfer(dataOut, data); //TODO: change to send the transfer over WIFI DIRECT SOCKET
+
+        //if data is not None:
+        ackIn = new RadioAck();
+
+        //if there was a data payload in the ack
+        if (data[0] != 0) {
+            //make sure this is an Ack, set the isAck boolean appropriately
+            ackIn.setAck((data[0] & 0x01) != 0);
+
+
+            ackIn.setPowerDet((data[0] & 0x02) != 0);
+
+
+            ackIn.setRetry(data[0] >> 4);
+
+            //set the payload
+            ackIn.setData(Arrays.copyOfRange(data, 1, data.length));
+        }
+
+        return ackIn;
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//BEGIN CLIENT/SERVER WIFI DIRECT SETUP CODE-----------------------------------------------------------------------------------------------------------------------------------------
 
 
     public static class becomeServerForPC extends Thread {
@@ -672,7 +756,7 @@ public class WifiDirect extends CrtpDriver {
         }).start();
     }
 
-//-----------------------------------------------------------------CLIENT CODE-------------------------------------------------------------------------------
+//-----------------------------------------------------------------END CLIENT CODE-------------------------------------------------------------------------------
 
 
     private List<WifiP2pDevice> deviceList = new ArrayList<>();
@@ -737,8 +821,10 @@ public class WifiDirect extends CrtpDriver {
             return null;
         }
 
-//--------------------------------------------------------------------SERVER CODE------------------------------------------------------------------------
+//--------------------------------------------------------------------END SERVER CODE------------------------------------------------------------------------
 
+
+        //unused AsyncTask methods
 
         @Override
         protected void onPostExecute (Void result) {

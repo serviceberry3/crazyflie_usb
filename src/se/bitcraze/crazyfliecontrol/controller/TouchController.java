@@ -58,6 +58,8 @@ public class TouchController extends AbstractController {
         updateAutoReturnMode();
     }
 
+
+    //auto return to center configuration for joysticks
     private void updateAutoReturnMode() {
         this.mJoystickViewLeft.setAutoReturnMode(isLeftAnalogFullTravelThrust() ? JoystickView.AUTO_RETURN_BOTTOM : JoystickView.AUTO_RETURN_CENTER);
         this.mJoystickViewLeft.autoReturn(true);
@@ -88,6 +90,11 @@ public class TouchController extends AbstractController {
         return "touch controller";
     }
 
+
+
+//JOYSTICK MOTION LISTENERS----------------------------------------------------------------------------------------------------------------------------------------------
+
+
     private JoystickMovedListener _listenerRight = new JoystickMovedListener() {
 
         @Override
@@ -95,8 +102,8 @@ public class TouchController extends AbstractController {
             if (isRightAnalogFullTravelThrust()) {
                 tilt = (tilt + 1.0f) / 2.0f;
             }
-            mControls.setRightAnalogY(tilt);
 
+            mControls.setRightAnalogY(tilt);
             mControls.setRightAnalogX(pan);
 
             updateFlightData();
@@ -116,6 +123,8 @@ public class TouchController extends AbstractController {
         }
     };
 
+
+
     private JoystickMovedListener _listenerLeft = new JoystickMovedListener() {
 
         @Override
@@ -127,6 +136,8 @@ public class TouchController extends AbstractController {
 
             mControls.setLeftAnalogX(pan);
 
+
+            //update flight info text on screen
             updateFlightData();
         }
 

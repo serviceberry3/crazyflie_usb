@@ -78,7 +78,7 @@ public class Crazyradio {
     private float mVersion; // Crazyradio firmware version
     private String mSerialNumber; // Crazyradio serial number
 
-    protected final static byte[] NULL_PACKET = new byte[] { (byte) 0xff };
+    public final static byte[] NULL_PACKET = new byte[] { (byte) 0xff };
 
     /**
      * Create object and scan for USB dongle if no device is supplied
@@ -89,7 +89,9 @@ public class Crazyradio {
         this.mUsbInterface = usbInterface;
         try {
             this.mUsbInterface.initDevice(CRADIO_VID, CRADIO_PID);
-        } catch (SecurityException | IOException e) {
+        }
+
+        catch (SecurityException | IOException e) {
             mLogger.error(e.getMessage());
             return;
         }
@@ -113,11 +115,13 @@ public class Crazyradio {
 
         this.mSerialNumber = mUsbInterface.getSerialNumber();
 
-        // Reset the dongle to power up settings
+        //Reset the dongle to power up settings
         this.mLogger.debug("Resetting dongle to power up settings...");
         setDatarate(DR_2MPS);
         setChannel(2);
         this.mArc = -1;
+
+
         if (mVersion >= 0.4) {
             setContinuousCarrier(false);
             // self.set_address((0xE7,) * 5)
@@ -187,7 +191,7 @@ public class Crazyradio {
     }
 
     /**
-     * Set the ACK retry count for radio communication
+     * Set the ACK retry count (ARC) for radio communication
      *
      * Set how often the radio will retry a transfer if the ACK has not been received.
      *
@@ -203,7 +207,7 @@ public class Crazyradio {
     }
 
     /**
-     * Set the ACK retry delay for radio communication
+     * Set the ACK retry delay (ARD) for radio communication
      *
      * Configure the time the radio waits for the acknowledge.
      *
@@ -368,13 +372,16 @@ public class Crazyradio {
             final byte[] sendData = CrtpPacket.NULL_PACKET.toByteArray();
 
             mUsbInterface.sendBulkTransfer(sendData, receiveData);
+
             if ((receiveData[0] & 1) != 0) { // check if ack received
                 result.add(new ConnectionData(channel, datarate));
                 mLogger.debug("Channel found: " + channel + " Data rate: " + datarate);
             }
             try {
                 Thread.sleep(20, 0);
-            } catch (InterruptedException e) {
+            }
+
+            catch (InterruptedException e) {
                 mLogger.error("scanChannelsSlow InterruptedException");
             }
         }
@@ -428,16 +435,22 @@ public class Crazyradio {
 
         // if data is not None:
         ackIn = new RadioAck();
+
+
         if (data[0] != 0) {
             ackIn.setAck((data[0] & 0x01) != 0);
             ackIn.setPowerDet((data[0] & 0x02) != 0);
             ackIn.setRetry(data[0] >> 4);
             ackIn.setData(Arrays.copyOfRange(data, 1, data.length));
-        } else {
+        }
+
+        else {
             ackIn.setRetry(mArc);
         }
         return ackIn;
     }
+
+
 
     private void sendVendorSetup(int request, int value, int index, byte[] data) {
         // usb.TYPE_VENDOR = 64 <=> 0x40

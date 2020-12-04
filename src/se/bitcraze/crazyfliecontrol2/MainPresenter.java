@@ -66,6 +66,7 @@ public class MainPresenter {
         this.mainActivity = null;
     }
 
+
     private ConnectionAdapter crazyflieConnectionAdapter = new ConnectionAdapter() {
 
         @Override
@@ -76,6 +77,8 @@ public class MainPresenter {
         @Override
         public void connected() {
             mainActivity.showToastie("Connected");
+
+            //bluetooth stuf
             if (mCrazyflie != null && mCrazyflie.getDriver() instanceof BleLink) {
                 mainActivity.setConnectionButtonConnectedBle();
                 // FIXME: Hack to circumvent BLE reconnect problem
@@ -83,6 +86,7 @@ public class MainPresenter {
             }
 
 
+            //set button look
             else {
                 mainActivity.setConnectionButtonConnected();
             }
@@ -101,6 +105,8 @@ public class MainPresenter {
                     checkForZRanger();
                 }
             }
+
+
             mLogg = mCrazyflie.getLogg();
             if (mLogg != null) {
                 final Toc logToc = mLogg.getToc();
@@ -111,6 +117,8 @@ public class MainPresenter {
                     startLogConfigs(mDefaultLogConfig);
                 }
             }
+
+            //start sending data from joystick
             startSendJoystickDataThread();
         }
 
@@ -205,25 +213,41 @@ public class MainPresenter {
             @Override
             public void run() {
                 while (mainActivity != null && mCrazyflie != null) {
+                    //get the controller we're using
                     IController controller = mainActivity.getController();
+
+
                     if (controller == null) {
                         Log.d(LOG_TAG, "SendJoystickDataThread: controller is null.");
                         break;
                     }
+
+                    //get the position control data
                     float roll = controller.getRoll();
                     float pitch = controller.getPitch();
                     float yaw = controller.getYaw();
                     float thrustAbsolute = controller.getThrustAbsolute();
+
+                    //probly not
                     boolean xmode = mainActivity.getControls().isXmode();
+
+
                     if (heightHold) {
                         float targetHeight = controller.getTargetHeight();
                         sendPacket(new ZDistancePacket(roll, pitch, yaw, targetHeight));
-                    } else {
+                    }
+
+                    //*****************************8
+                    //DEFAULT. Send a CommanderPacket to the drone with the requested movement data
+                    else {
                         sendPacket(new CommanderPacket(roll, pitch, yaw, (char) thrustAbsolute, xmode));
                     }
+
                     try {
                         Thread.sleep(20);
-                    } catch (InterruptedException e) {
+                    }
+
+                    catch (InterruptedException e) {
                         Log.d(LOG_TAG, "SendJoystickDataThread was interrupted.");
                         break;
                     }
@@ -245,7 +269,13 @@ public class MainPresenter {
 
         Log.i(LOG_TAG, "Connection finished, instantiating Crazyflie");
 
+
+        //add listener for connection status
+        mDriver.addConnectionListener(crazyflieConnectionAdapter);
+
         mCrazyflie = new Crazyflie(wifiDirectDriver, mCacheDir);
+
+
 
         //call connect on the driver
         mCrazyflie.connect();
@@ -266,18 +296,24 @@ public class MainPresenter {
 
     public void connectCrazyradio(int radioChannel, int radioDatarate, File mCacheDir) {
         Log.d(LOG_TAG, "connectCrazyradio()");
-        // ensure previous link is disconnected
+        //ensure previous link is disconnected and driver is blank
         disconnect();
         mDriver = null;
+
         try {
             mDriver = new RadioDriver(new UsbLinkAndroid(mainActivity));
-        } catch (IllegalArgumentException e) {
+        }
+
+        catch (IllegalArgumentException e) {
             Log.d(LOG_TAG, e.getMessage());
             mainActivity.showToastie(e.getMessage());
-        } catch (IOException e) {
+        }
+
+        catch (IOException e) {
             Log.e(LOG_TAG, e.getMessage());
             mainActivity.showToastie(e.getMessage());
         }
+
         connect(mCacheDir, new ConnectionData(radioChannel, radioDatarate));
     }
 
