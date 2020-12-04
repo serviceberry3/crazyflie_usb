@@ -281,12 +281,17 @@ public class MainPresenter {
         //add listener for connection status
         wifiDirectDriver.addConnectionListener(crazyflieConnectionAdapter);
 
-        mCrazyflie = new Crazyflie(wifiDirectDriver, mCacheDir);
+        mCrazyflie = new Crazyflie(wifiDirectDriver, mCacheDir, this);
 
         //Pixel has now been found. Request p2p connection with it
         wifiDirectDriver.connectTo(wifiDirectDriver.pixelDev);
 
+        //we need to wait here
 
+
+    }
+
+    public void onConnectToPixelFinished() {
         //call connect on the driver
         mCrazyflie.connect();
 
@@ -347,7 +352,7 @@ public class MainPresenter {
             //add listener for connection status
             mDriver.addConnectionListener(crazyflieConnectionAdapter);
 
-            mCrazyflie = new Crazyflie(mDriver, mCacheDir);
+            mCrazyflie = new Crazyflie(mDriver, mCacheDir, this);
 
             if (mDriver instanceof RadioDriver) {
                 mCrazyflie.setConnectionData(connectionData);
@@ -380,7 +385,7 @@ public class MainPresenter {
             mSendJoystickDataThread = null;
         }
 
-        //
+        //remove the ConsoleListener from our instance of Crazyflie
         if (mCrazyflie != null) {
             mCrazyflie.removeDataListener(mConsoleListener);
             mCrazyflie.disconnect();
@@ -393,7 +398,7 @@ public class MainPresenter {
             wifiDirectDriver.removeConnectionListener(crazyflieConnectionAdapter);
         }
 
-        // link quality is not available when there is no active connection
+        //link quality is not available when there is no active connection
         mainActivity.setLinkQualityText("N/A");
     }
 

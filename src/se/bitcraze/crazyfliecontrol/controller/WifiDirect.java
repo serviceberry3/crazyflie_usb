@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.graphics.ImageDecoder;
 import android.net.NetworkInfo;
 import android.net.wifi.p2p.WifiP2pConfig;
 import android.net.wifi.p2p.WifiP2pDevice;
@@ -42,6 +43,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
@@ -84,11 +86,17 @@ public class WifiDirect extends CrtpDriver {
     public WifiP2pManager wifiP2pManager;
     public WifiP2pManager.Channel wifiDirectChannel;
 
+    private FileServerAsyncTask serverTask = null;
+
     private boolean mWriteWithAnswer;
 
     private final BlockingQueue<CrtpPacket> mOutQueue = new LinkedBlockingQueue<CrtpPacket>();
     //TODO: Limit size of out queue to avoid "ReadBack" effect?
     private final BlockingQueue<CrtpPacket> mInQueue = new LinkedBlockingQueue<CrtpPacket>();
+
+    private final BlockingQueue<CrtpPacket> mSocketInQueue = new LinkedBlockingQueue<CrtpPacket>();
+    private final BlockingQueue<CrtpPacket> mSocketOutQueue = new LinkedBlockingQueue<CrtpPacket>();
+
 
 
     public volatile boolean connected = false;
@@ -246,9 +254,19 @@ public class WifiDirect extends CrtpDriver {
                                 if (info.isGroupOwner) {
                                     Log.i(TAG, "We're the server, creating ServerSocket in background and waiting for client...");
 
-                                    //create ServerSocket in background and wait for client to connect
-                                    FileServerAsyncTask asyncServerSockInit = new FileServerAsyncTask();
-                                    asyncServerSockInit.execute();
+                                        //create ServerSocket in background and wait for client to connect
+                                        serverTask = new FileServerAsyncTask();
+                                    try {
+                                        //wait for socket setup task to finish
+                                        serverTask.execute().get();
+                                    } catch (ExecutionException e) {
+                                        e.printStackTrace();
+                                    } catch (InterruptedException e) {
+                                        e.printStackTrace();
+                                    }
+
+                                    //notify the presenter that we can start everything up
+                                    mContext.getMainPresenter().onConnectToPixelFinished();
                                 }
 
 
@@ -277,12 +295,24 @@ public class WifiDirect extends CrtpDriver {
     //MAND METHODS FROM CRTPDRIVER-----------------------------------------------------------------------------------------------------------------------------------------
     @Override
     public void connect() throws IOException {
+
         //Show connecting toast
         notifyConnectionRequested();
+
 
         //Launch the comm thread
         startSendReceiveThread(); //CAUSING MAIN THD TO BLOCK
     }
+
+    /*
+    public void notifySocketConnectionFinished() throws IOException {
+        //Show connecting toast
+        notifyConnectionRequested();
+
+
+        //Launch the comm thread
+        startSendReceiveThread(); //CAUSING MAIN THD TO BLOCK
+    }*/
 
     @Override
     public void disconnect() {
@@ -291,15 +321,15 @@ public class WifiDirect extends CrtpDriver {
         //Stop the comm thread, if it's up
         stopSendReceiveThread();
 
-        //Avoid NPE because packets are still processed
+        //Avoid NPE because packets are still processed. Wait .1 sec for the sendreceive thread to stop
         try {
             Thread.sleep(100);
         }
-
         catch (InterruptedException e) {
             mLogger.error("Interrupted during disconnect: " + e.getMessage());
         }
 
+        Log.i(TAG, "WifiDirect driver disconnect done.");
         //just do some UI and log stuff for the disconnect
         notifyDisconnected();
     }
@@ -411,9 +441,10 @@ public class WifiDirect extends CrtpDriver {
 
     //instantiate and start a new Thread that receives and sends packets
     private void startSendReceiveThread() {
+        Log.i(TAG, "startSendReceiveThread");
         if (mRadioDriverThread == null) {
             //self._thread = _RadioDriverThread(self.cradio, self.in_queue, self.out_queue, link_quality_callback, link_error_callback)
-            WifiDirect.RadioDriverThread rDT = new WifiDirect.RadioDriverThread();
+            WifiDirect.RadioDriverThread rDT = new WifiDirect.RadioDriverThread(serverTask);
 
             //run on separate (non-UI) thread to avoid blocking UI
             mRadioDriverThread = new Thread(rDT);
@@ -442,11 +473,15 @@ public class WifiDirect extends CrtpDriver {
         //how many times to retry sending a packet and get back .isAck() as false before we disconnect
         private final static int RETRYCOUNT_BEFORE_DISCONNECT = 10;
         private int mRetryBeforeDisconnect;
+        private final OutputStream outputStream;
+        private final InputStream inputStream;
 
         /**
          * Create the object
          */
-        public RadioDriverThread() {
+        public RadioDriverThread(FileServerAsyncTask serverTask) {
+            this.outputStream = serverTask.getOutStream();
+            this.inputStream = serverTask.getInStream();
             this.mRetryBeforeDisconnect = RETRYCOUNT_BEFORE_DISCONNECT;
         }
 
@@ -468,6 +503,7 @@ public class WifiDirect extends CrtpDriver {
 
             //as long as the Thread isn't interrupted. (Basically runs infinitely)
             while (!Thread.currentThread().isInterrupted()) {
+                Log.i(TAG, "Running sendReceiveThread");
                 try {
 
                     /*
@@ -481,14 +517,16 @@ public class WifiDirect extends CrtpDriver {
                                                  traceback.format_exc()))
                     */
 
-
-                    RadioAck ackStatus = sendPacketHelper(dataOut);                       //TODO: implement new packet sender for WIFI DIRECT SOCKET
+                    //***********************************************************************************************************************************
+                    //send next packet to the drone
+                    RadioAck ackStatus = sendPacketHelper(dataOut, outputStream, inputStream);                       //TODO: implement new packet sender for WIFI DIRECT SOCKET
 
                     //Analyze the data packet returned by the onboard Pixel (client) after the send. If there was no acknowledgment, something's wrong with comms
                     if (ackStatus == null) {
-                        //No acknowledgement returned. Log stuff and disconnect everything
+                        //No acknowledgement returned. Log stuff and disconnect everything. This will end up interrupt()ing this thread when disconnect() is called above
                         notifyConnectionLost("Dongle communication error (ackStatus == null)"); //calls disconnect() on MainPresenter instance
                         mLogger.warn("Dongle communication error (ackStatus == null)");
+                        Log.e(TAG, "WifiDirect driver: ackStatus came up NULL in sendreceive thread. Shutting everything down.");
                         continue;
                     }
 
@@ -501,8 +539,9 @@ public class WifiDirect extends CrtpDriver {
                     if (!ackStatus.isAck()) {
                         this.mRetryBeforeDisconnect--;
                         if (this.mRetryBeforeDisconnect == 0) {
+                            //we've retried the send 10 times, now we'll disconnect everything and interrupt this thread in disconnect() above.
                             notifyConnectionLost("Too many packets lost");
-                            mLogger.warn("Too many packets lost");
+                            Log.e(TAG, "WifiDirect driver: too many packets were lost in sendreceive thread. Shutting everything down.");
                         }
 
                         continue;
@@ -557,6 +596,7 @@ public class WifiDirect extends CrtpDriver {
 
                     //otherwise set out to 0xff again
                     else {
+                        //prepare a NULL packet to send to the copter
                         dataOut = Crazyradio.NULL_PACKET;
                     }
                     //Thread.sleep(10);
@@ -583,12 +623,20 @@ public class WifiDirect extends CrtpDriver {
      *
      * @param dataOut bytes to send
      */
-    public RadioAck sendPacketHelper(byte[] dataOut) { //was sendPacket
+    public RadioAck sendPacketHelper(byte[] dataOut, OutputStream outStream, InputStream inStream) { //was sendPacket
         RadioAck ackIn = null;
-        byte[] data = new byte[33]; // 33?
 
-       // Log.i(TAG, String.format("Sending packet of length %d", dataOut.length));
+        byte[] dataIn = new byte[33]; // 33?
 
+        //Log.i(TAG, String.format("Sending packet of length %d to drone", dataOut.length));
+
+        /*pseudo: send packet via the server/client socket
+        We're the server, so we need to write a packet. Then we need to block waiting for the returned response
+        */
+
+
+
+        asServerSendDataAndWaitForResponse(dataOut, dataIn, outStream, inStream);
 
         //mUsbInterface.sendBulkTransfer(dataOut, data); //TODO: change to send the transfer over WIFI DIRECT SOCKET
 
@@ -596,23 +644,46 @@ public class WifiDirect extends CrtpDriver {
         ackIn = new RadioAck();
 
         //if there was a data payload in the ack
-        if (data[0] != 0) {
+        if (dataIn[0] != 0) {
             //make sure this is an Ack, set the isAck boolean appropriately
-            ackIn.setAck((data[0] & 0x01) != 0);
+            ackIn.setAck((dataIn[0] & 0x01) != 0);
 
 
-            ackIn.setPowerDet((data[0] & 0x02) != 0);
+            ackIn.setPowerDet((dataIn[0] & 0x02) != 0);
 
 
-            ackIn.setRetry(data[0] >> 4);
+            ackIn.setRetry(dataIn[0] >> 4);
 
             //set the payload
-            ackIn.setData(Arrays.copyOfRange(data, 1, data.length));
+            ackIn.setData(Arrays.copyOfRange(dataIn, 1, dataIn.length));
         }
 
         return ackIn;
     }
 
+
+    public void asServerSendDataAndWaitForResponse(byte[] out, byte[] in, OutputStream outStream, InputStream inStream) {
+        Log.i(TAG, "testing send and wiat fxn");
+
+        try {
+            outStream.write(out);
+        }
+
+        catch (IOException e) {
+            e.printStackTrace();
+        }
+
+
+        Log.i(TAG,"Waiting for read in from drone...");
+        //block waiting for a packet
+        try {
+            int dataIn = inStream.read(in);
+        }
+
+        catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
 
 
 
@@ -767,7 +838,7 @@ public class WifiDirect extends CrtpDriver {
     //---------------------------------------------------------------------SERVER CODE---------------------------------------------------------------------------
 
     //Server socket that initializes in background and accepts connection and reads data from client (use of AsyncTask here is probly stupid)
-    public static class FileServerAsyncTask extends AsyncTask<Void, Void, Void> { //params passed, progress update returned, final returned
+    public static class FileServerAsyncTask extends AsyncTask<WifiDirect, Void, Void> { //params passed, progress update returned, final returned
         private Context context;
         private TextView statusText;
 
@@ -776,8 +847,20 @@ public class WifiDirect extends CrtpDriver {
 
         private ServerSocket serverSocket;
 
+        public boolean done = false;
+
+
+        //getters for public use so that we can send and receive
+        public OutputStream getOutStream() {
+            return outStream;
+        }
+
+        public InputStream getInStream() {
+            return inStream;
+        }
+
         @Override
-        protected Void doInBackground(Void... params) {
+        protected Void doInBackground(WifiDirect... params) {
             try {
                 //Create a server socket and wait for client connections. This
                 //call blocks until a connection is accepted from a client
@@ -795,6 +878,9 @@ public class WifiDirect extends CrtpDriver {
                 outStream = client.getOutputStream();
                 inStream = client.getInputStream();
 
+
+                //SOCKET COMMS TEST
+                /*
                 Log.d(TAG, "Server: reading in data...");
 
                 byte[] in = new byte[10];
@@ -803,24 +889,86 @@ public class WifiDirect extends CrtpDriver {
                 int dataIn = inStream.read(in);
 
                 Log.d(TAG, "Server: reading in data complete");
-                Log.d(TAG, String.format("Got message from client: " + in[0]));
+                Log.d(TAG, String.format("Got message from client: " + in[0]));*/
             }
 
             catch (IOException e) {
                 e.printStackTrace();
             }
 
+            //CLOSING THE SOCKET
+            /*
             finally {
                 try {
                     //close up the socket
                     serverSocket.close();
-                } catch (IOException e) {
+                }
+
+                catch (IOException e) {
                     e.printStackTrace();
                 }
-            }
+            }*/
 
             return null;
         }
+
+
+
+
+        //non-static version
+        private void fileServerTask(final String hostAddress, WifiDirect wifiDirect) {
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        //Create a server socket and wait for client connections. This
+                        //call blocks until a connection is accepted from a client
+                        serverSocket = new ServerSocket(8988);
+
+                        Log.d(TAG, "Server: Socket opened port 8988, waiting for client");
+                        Log.i(TAG, "Address: " + serverSocket.getLocalSocketAddress());
+
+                        //block until connection from client comes through
+                        Socket client = serverSocket.accept();
+
+                        Log.d(TAG, "Server: connection from client came through");
+
+                        //get input and output streams for the client
+                        outStream = client.getOutputStream();
+                        inStream = client.getInputStream();
+
+
+                        //SOCKET COMMS TEST
+                        /*
+                        Log.d(TAG, "Server: reading in data...");
+
+                        byte[] in = new byte[10];
+
+                        //this call BLOCKS until data detected and read in
+                        int dataIn = inStream.read(in);
+
+                        Log.d(TAG, "Server: reading in data complete");
+                        Log.d(TAG, String.format("Got message from client: " + in[0]));*/
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+
+                    //CLOSING THE SOCKET
+                    /*
+                    finally {
+                        try {
+                            //close up the socket
+                            serverSocket.close();
+                        }
+
+                        catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }*/
+                }
+            }).start();
+        }
+
 
 //--------------------------------------------------------------------END SERVER CODE------------------------------------------------------------------------
 
@@ -829,14 +977,14 @@ public class WifiDirect extends CrtpDriver {
 
         @Override
         protected void onPostExecute (Void result) {
+            done = true;
         }
+
 
 
         @Override
         protected void onPreExecute() {
         }
     }
-
-
 
 }

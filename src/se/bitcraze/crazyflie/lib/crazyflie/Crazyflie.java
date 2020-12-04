@@ -48,6 +48,8 @@ import se.bitcraze.crazyflie.lib.log.Logg;
 import se.bitcraze.crazyflie.lib.param.Param;
 import se.bitcraze.crazyflie.lib.toc.TocCache;
 import se.bitcraze.crazyflie.lib.toc.TocFetchFinishedListener;
+import se.bitcraze.crazyfliecontrol2.MainActivity;
+import se.bitcraze.crazyfliecontrol2.MainPresenter;
 
 public class Crazyflie {
 
@@ -68,6 +70,8 @@ public class Crazyflie {
     private Param mParam;
     private Logg mLogg;
     private TocCache mTocCache;
+
+    private MainPresenter mainPresenter;
 
     /**
      * State of the connection procedure
@@ -90,7 +94,7 @@ public class Crazyflie {
      * @param driver driver to use (e.g. RadioDriver or BleLink)
      */
     public Crazyflie(CrtpDriver driver) {
-        this(driver, null);
+        this(driver, null, null);
     }
 
     /**
@@ -99,9 +103,10 @@ public class Crazyflie {
      * @param driver driver to use (e.g. RadioDriver or BleLink)
      * @param tocCacheDir TOC cache files dir
      */
-    public Crazyflie(CrtpDriver driver, File tocCacheDir) {
+    public Crazyflie(CrtpDriver driver, File tocCacheDir, MainPresenter mainPresenter) {
         this.mDriver = driver;
         this.mTocCache = new TocCache(tocCacheDir);
+        this.mainPresenter = mainPresenter;
     }
 
     public void connect() {
@@ -140,7 +145,7 @@ public class Crazyflie {
             disconnect();
         }
 
-        /*
+
         //instantiate and start IncomingPacketHandler on new Thread
         if (mIncomingPacketHandlerThread == null) {
             IncomingPacketHandler iph = new IncomingPacketHandler();
@@ -153,7 +158,7 @@ public class Crazyflie {
             ResendQueueHandler rqh = new ResendQueueHandler();
             mResendQueueHandlerThread = new Thread(rqh);
             mResendQueueHandlerThread.start();
-        }*/
+        }
     }
 
     public void disconnect() {
@@ -318,6 +323,10 @@ public class Crazyflie {
 
     public CrtpDriver getDriver() {
         return mDriver;
+    }
+
+    public MainPresenter getMainPresenter() {
+        return mainPresenter;
     }
 
 

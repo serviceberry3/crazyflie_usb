@@ -221,6 +221,10 @@ public class MainActivity extends Activity {
         setCacheDir();
     }
 
+    public MainPresenter getMainPresenter() {
+        return mPresenter;
+    }
+
     private void initializeSounds() {
         this.setVolumeControlStream(AudioManager.STREAM_MUSIC);
         // Load sounds
