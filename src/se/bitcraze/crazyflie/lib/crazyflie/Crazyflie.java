@@ -106,6 +106,7 @@ public class Crazyflie {
         mLogger.debug("connect()");
         mState = State.INITIALIZED;
 
+        /*
         // try to connect
         try {
             if (mDriver instanceof RadioDriver) {
@@ -115,24 +116,28 @@ public class Crazyflie {
                 ((RadioDriver) mDriver).setConnectionData(mConnectionData);
             }
             mDriver.connect();
-        } catch (IOException | IllegalArgumentException ioe) {
-            mLogger.debug(ioe.getMessage());
-//            notifyConnectionFailed("Connection failed: " + ioe.getMessage());
-            disconnect();
         }
 
+        catch (IOException | IllegalArgumentException ioe) {
+            mLogger.debug(ioe.getMessage());
+            //notifyConnectionFailed("Connection failed: " + ioe.getMessage());
+            disconnect();
+        }*/
+
+
+        //instantiate and start IncomingPacketHandler on new Thread
         if (mIncomingPacketHandlerThread == null) {
             IncomingPacketHandler iph = new IncomingPacketHandler();
             mIncomingPacketHandlerThread = new Thread(iph);
             mIncomingPacketHandlerThread.start();
         }
 
+        //instantiate and start ResendQueueHandler on new Thread
         if (mResendQueueHandlerThread == null) {
             ResendQueueHandler rqh = new ResendQueueHandler();
             mResendQueueHandlerThread = new Thread(rqh);
             mResendQueueHandlerThread.start();
         }
-
     }
 
     public void disconnect() {
@@ -209,7 +214,7 @@ public class Crazyflie {
     private boolean isPacketMatchingExpectedReply(CrtpPacket resendQueuePacket, CrtpPacket packet) {
         //Only check equality for the amount of bytes in expected reply
         byte[] expectedReply = resendQueuePacket.getExpectedReply();
-        for(int i = 0; i < expectedReply.length;i++) {
+        for (int i = 0; i < expectedReply.length;i++) {
             if(expectedReply[i] != packet.getPayload()[i]) {
                 return false;
             }
@@ -231,7 +236,10 @@ public class Crazyflie {
                 }
                 try {
                     Thread.sleep(500);
-                } catch (InterruptedException e) {
+                }
+
+
+                catch (InterruptedException e) {
                     mLogger.debug("ResendQueueHandlerThread was interrupted.");
                     break;
                 }
@@ -272,7 +280,7 @@ public class Crazyflie {
         }
     }
 
-    public CrtpDriver getDriver(){
+    public CrtpDriver getDriver() {
         return mDriver;
     }
 
@@ -376,6 +384,7 @@ public class Crazyflie {
      */
     private void notifyDataReceived(CrtpPacket packet) {
         boolean found = false;
+
         for (DataListener dataListener : mDataListeners) {
             if (dataListener.getPort() == packet.getHeader().getPort()) {
                 dataListener.dataReceived(packet);
@@ -394,15 +403,22 @@ public class Crazyflie {
 
         final Logger mLogger = LoggerFactory.getLogger("IncomingPacketHandler");
 
+
         public void run() {
             mLogger.debug("IncomingPacketHandlerThread was started.");
+
+            //as long as the Thread isn't interrupted
             while(!Thread.currentThread().isInterrupted()) {
+                //receive a packet from the driver
                 CrtpPacket packet = getDriver().receivePacket(1);
-                if(packet != null) {
+
+                //make sure packet is non-null
+                if (packet != null) {
                     //All-packet callbacks
                     //self.cf.packet_received.call(pk)
 
                     checkForInitialPacketCallback(packet);
+
                     checkReceivedPackets(packet);
 
                     notifyDataReceived(packet);

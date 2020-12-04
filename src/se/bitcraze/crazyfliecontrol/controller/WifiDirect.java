@@ -1,6 +1,7 @@
 package se.bitcraze.crazyfliecontrol.controller;
 
 import android.Manifest;
+import android.bluetooth.BluetoothGattCharacteristic;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -26,6 +27,9 @@ import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -35,15 +39,30 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
+import se.bitcraze.crazyflie.lib.Utilities;
+import se.bitcraze.crazyflie.lib.crazyradio.ConnectionData;
+import se.bitcraze.crazyflie.lib.crazyradio.Crazyradio;
+import se.bitcraze.crazyflie.lib.crazyradio.RadioAck;
+import se.bitcraze.crazyflie.lib.crazyradio.RadioDriver;
+import se.bitcraze.crazyflie.lib.crtp.CrtpDriver;
+import se.bitcraze.crazyflie.lib.crtp.CrtpPacket;
+import se.bitcraze.crazyflie.lib.usb.CrazyUsbInterface;
+import se.bitcraze.crazyfliecontrol.ble.BleLink;
 import se.bitcraze.crazyfliecontrol2.MainActivity;
 import se.bitcraze.crazyfliecontrol2.R;
 
-public class WifiDirect {
+public class WifiDirect extends CrtpDriver {
+
+    private final Logger mLogger = LoggerFactory.getLogger("BLELink");
 
     private static final String TAG = "WifiDirect";
-    private MainActivity mainActivity;
+    private MainActivity mContext;
 
     private ListView listView;
     private TextView tv;
@@ -63,8 +82,15 @@ public class WifiDirect {
     public WifiP2pManager wifiP2pManager;
     public WifiP2pManager.Channel wifiDirectChannel;
 
+    private final BlockingQueue<CrtpPacket> mInQueue;
+    private boolean mWriteWithAnswer;
+
+    public volatile boolean connected = false;
+
     public WifiDirect(MainActivity activity) {
-        this.mainActivity = activity;
+        this.mContext = activity;
+
+        this.mInQueue = new LinkedBlockingQueue<CrtpPacket>();
 
         //initialize the p2p channel
         init();
@@ -72,10 +98,10 @@ public class WifiDirect {
 
     public void init() {
         //initialize the peer-to-peer (Wifi Direct) connection manager
-        wifiP2pManager = (WifiP2pManager) mainActivity.getSystemService(Context.WIFI_P2P_SERVICE);
+        wifiP2pManager = (WifiP2pManager) mContext.getSystemService(Context.WIFI_P2P_SERVICE);
 
         //WifiP2pManager's initialize() fxn returns channel instance that is necessary for performing any further p2p operations
-        wifiDirectChannel = wifiP2pManager.initialize(mainActivity, mainActivity.getMainLooper(),
+        wifiDirectChannel = wifiP2pManager.initialize(mContext, mContext.getMainLooper(),
                 new WifiP2pManager.ChannelListener() {
                     public void onChannelDisconnected() {
                         //re-initialize the WifiDirect channel upon disconnection
@@ -136,7 +162,7 @@ public class WifiDirect {
 
                                 if (dev.deviceName.equals("Android_ea5c")) {
                                     Log.i(TAG, "Found Android_ea5c, setting dev...");
-                                    Toast.makeText(mainActivity, "Ready to hit lower button.", Toast.LENGTH_LONG).show();
+                                    Toast.makeText(mContext, "Ready to hit lower button.", Toast.LENGTH_LONG).show();
 
                                     pixelDev = dev;
 
@@ -154,7 +180,7 @@ public class WifiDirect {
     //WIFI_P2P_PEERS_CHANGED_ACTION indicates if peer list has changed
     public void discoverPeers() {
         //make sure we have permission
-        if (ActivityCompat.checkSelfPermission(mainActivity, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        if (ActivityCompat.checkSelfPermission(mContext, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             Log.e(TAG, "discoverPeers(): ACCESS_FINE_LOCATION not granted");
             return;
         }
@@ -177,13 +203,14 @@ public class WifiDirect {
         config.deviceAddress = device.deviceAddress;
 
         //make sure we have fine location perm
-        if (ActivityCompat.checkSelfPermission(mainActivity, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        if (ActivityCompat.checkSelfPermission(mContext, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             Log.e(TAG, "P2P connect error: fine location perm not granted");
             return;
         }
 
         //connect to the p2p device using the above address we got from the device
         wifiP2pManager.connect(wifiDirectChannel, config, actionListener);
+        Log.i(TAG, "connectTo finished");
     }
 
 
@@ -226,6 +253,9 @@ public class WifiDirect {
                                     //create Socket in background and request connection to server
                                     initiateClientSocket(info.groupOwnerAddress.getHostAddress());
                                 }
+
+                                connected = true;
+
                             }
                         }
                     });
@@ -235,6 +265,297 @@ public class WifiDirect {
             Log.d(TAG, "Wi-Fi Direct Disconnected");
         }
     }
+
+
+
+    //MAND METHODS FROM CRTPDRIVER-----------------------------------------------------------------------------------------------------------------------------------------
+    @Override
+    public void connect() throws IOException {
+
+    }
+
+    @Override
+    public void disconnect() {
+        mLogger.debug("disconnect()");
+        // Stop the comm thread
+        stopSendReceiveThread();
+        // Avoid NPE because packets are still processed
+        try {
+            Thread.sleep(100);
+        } catch (InterruptedException e) {
+            mLogger.error("Interrupted during disconnect: " + e.getMessage());
+        }
+        if(this.mCradio != null) {
+            this.mCradio.disconnect();
+            this.mCradio = null;
+        }
+        notifyDisconnected();
+    }
+
+    //check whether we're maintaining a connection between drone phone and controller phone
+    @Override
+    public boolean isConnected() {
+        return connected;
+    }
+
+    int ctr = 0;
+    @Override
+    public void sendPacket(CrtpPacket packet) {
+        if (this.mCradio == null) {
+            return;
+        }
+
+        //TODO: does it make sense to be able to queue packets even though
+        //the connection is not established yet?
+
+        /*
+        try:
+            self.out_queue.put(pk, True, 2)
+        except Queue.Full:
+            if self.link_error_callback:
+                self.link_error_callback("RadioDriver: Could not send packet to copter")
+        */
+
+        // this.mOutQueue.addLast(packet);
+        try {
+            this.mOutQueue.put(packet);
+        } catch (InterruptedException e) {
+            mLogger.error("InterruptedException: " + e.getMessage());
+        }
+
+    }
+
+    @Override
+    public CrtpPacket receivePacket(int wait) {
+        try {
+            return mInQueue.poll((long) time, TimeUnit.SECONDS);
+        }
+
+        catch (InterruptedException e) {
+            mLogger.error("InterruptedException: " + e.getMessage());
+            return null;
+        }
+    }
+    //END MAND METHODS FROM CRTPDRIVER..........................................................................................................................................
+
+
+
+    public List<ConnectionData> scanInterface() {
+        return scanInterface(mCradio, mUsbInterface);
+    }
+
+    /**
+     * Scan interface for Crazyflies
+     */
+    private static List<ConnectionData> scanInterface(Crazyradio crazyRadio, CrazyUsbInterface crazyUsbInterface) {
+        List<ConnectionData> connectionDataList = new ArrayList<ConnectionData>();
+
+        if(crazyRadio == null) {
+            crazyRadio = new Crazyradio(crazyUsbInterface);
+        } else {
+            mLogger.error("Cannot scan for links while the link is open!");
+            //TODO: throw exception?
+        }
+
+        mLogger.info("Found Crazyradio with version " + crazyRadio.getVersion() + " and serial number " + crazyRadio.getSerialNumber());
+
+        crazyRadio.setArc(1);
+
+//        crazyRadio.setDataRate(CrazyradioLink.DR_250KPS);
+//        List<Integer> scanRadioChannels250k = crazyRadio.scanChannels();
+//        for(Integer channel : scanRadioChannels250k) {
+//            connectionDataList.add(new ConnectionData(channel, CrazyradioLink.DR_250KPS));
+//        }
+//        crazyRadio.setDataRate(CrazyradioLink.DR_1MPS);
+//        List<Integer> scanRadioChannels1m = crazyRadio.scanChannels();
+//        for(Integer channel : scanRadioChannels1m) {
+//            connectionDataList.add(new ConnectionData(channel, CrazyradioLink.DR_1MPS));
+//        }
+//        crazyRadio.setDataRate(CrazyradioLink.DR_2MPS);
+//        List<Integer> scanRadioChannels2m = crazyRadio.scanChannels();
+//        for(Integer channel : scanRadioChannels2m) {
+//            connectionDataList.add(new ConnectionData(channel, CrazyradioLink.DR_2MPS));
+//        }
+
+        try {
+            connectionDataList = Arrays.asList(crazyRadio.scanChannels());
+        } catch (IOException e) {
+            mLogger.error(e.getMessage());
+        }
+
+//        crazyRadio.close();
+//        crazyRadio = null;
+
+        return connectionDataList;
+    }
+
+    public boolean scanSelected(ConnectionData connectionData, byte[] packet) {
+        if (mCradio == null) {
+            mCradio = new Crazyradio(mUsbInterface);
+        }
+        return mCradio.scanSelected(connectionData.getChannel(), connectionData.getDataRate(), packet);
+    }
+
+    public boolean setBootloaderAddress(byte[] newAddress) {
+        if (newAddress.length != 5) {
+            mLogger.error("Radio address should be 5 bytes long");
+            return false;
+        }
+        // self.link.pause()
+        stopSendReceiveThread();
+
+        int SET_BOOTLOADER_ADDRESS = 0x11; // Only implemented on Crazyflie version 0x00
+        //TODO: is there a more elegant way to do this?
+        //pkdata = (0xFF, 0xFF, 0x11) + tuple(new_address)
+        byte[] pkData = new byte[newAddress.length + 3];
+        pkData[0] = (byte) 0xFF;
+        pkData[1] = (byte) 0xFF;
+        pkData[2] = (byte) SET_BOOTLOADER_ADDRESS;
+        System.arraycopy(newAddress, 0, pkData, 3, newAddress.length);
+
+        for (int i = 0; i < 10; i++) {
+            mLogger.debug("Trying to set new radio address");
+            //self.link.cradio.set_address((0xE7,) * 5)
+            mCradio.setAddress(new byte[]{(byte) 0xE7, (byte) 0xE7, (byte) 0xE7, (byte) 0xE7, (byte) 0xE7});
+            mCradio.sendPacket(pkData);
+            //self.link.cradio.set_address(tuple(new_address))
+            mCradio.setAddress(newAddress);
+            //if self.link.cradio.send_packet((0xff,)).ack:
+            RadioAck ack = mCradio.sendPacket(new byte[] {(byte) 0xFF});
+            if (ack != null) {
+                mLogger.info("Bootloader set to radio address " + Utilities.getHexString(newAddress));
+                startSendReceiveThread();
+                return true;
+            }
+        }
+        //this.mDriver.restart();
+        startSendReceiveThread();
+        return false;
+    }
+
+    private void startSendReceiveThread() {
+        if (mRadioDriverThread == null) {
+            //self._thread = _RadioDriverThread(self.cradio, self.in_queue, self.out_queue, link_quality_callback, link_error_callback)
+            RadioDriver.RadioDriverThread rDT = new RadioDriver.RadioDriverThread();
+            mRadioDriverThread = new Thread(rDT);
+            mRadioDriverThread.start();
+        }
+    }
+
+    private void stopSendReceiveThread() {
+        if (this.mRadioDriverThread != null) {
+            this.mRadioDriverThread.interrupt();
+            this.mRadioDriverThread = null;
+        }
+    }
+
+    /**
+     * Radio link receiver thread is used to read data from the Crazyradio USB driver.
+     */
+    private class RadioDriverThread implements Runnable {
+
+        final Logger mLogger = LoggerFactory.getLogger(this.getClass().getSimpleName());
+
+        private final static int RETRYCOUNT_BEFORE_DISCONNECT = 10;
+        private int mRetryBeforeDisconnect;
+
+        /**
+         * Create the object
+         */
+        public RadioDriverThread() {
+            this.mRetryBeforeDisconnect = RETRYCOUNT_BEFORE_DISCONNECT;
+        }
+
+        /**
+         * Run the receiver thread
+         *
+         * (non-Javadoc)
+         * @see java.lang.Runnable#run()
+         */
+        public void run() {
+            byte[] dataOut = Crazyradio.NULL_PACKET;
+
+            double waitTime = 0;
+            int emptyCtr = 0;
+
+            while(mCradio != null && !Thread.currentThread().isInterrupted()) {
+                try {
+
+                    /*
+                    try:
+                        ackStatus = self.cradio.send_packet(dataOut)
+                    except Exception as e:
+                        import traceback
+                        self.link_error_callback("Error communicating with crazy radio"
+                                                 " ,it has probably been unplugged!\n"
+                                                 "Exception:%s\n\n%s" % (e,
+                                                 traceback.format_exc()))
+                    */
+                    RadioAck ackStatus = mCradio.sendPacket(dataOut);
+
+                    // Analyze the data packet
+                    if (ackStatus == null) {
+                        notifyConnectionLost("Dongle communication error (ackStatus == null)");
+                        mLogger.warn("Dongle communication error (ackStatus == null)");
+                        continue;
+                    }
+
+                    notifyLinkQualityUpdated((10 - ackStatus.getRetry()) * 10);
+
+                    // If no copter, retry
+                    //TODO: how is this actually possible?
+                    if (!ackStatus.isAck()) {
+                        this.mRetryBeforeDisconnect--;
+                        if (this.mRetryBeforeDisconnect == 0) {
+                            notifyConnectionLost("Too many packets lost");
+                            mLogger.warn("Too many packets lost");
+                        }
+                        continue;
+                    }
+                    this.mRetryBeforeDisconnect = RETRYCOUNT_BEFORE_DISCONNECT;
+
+                    byte[] data = ackStatus.getData();
+
+                    // if there is a copter in range, the packet is analyzed and the next packet to send is prepared
+                    if (data != null && data.length > 0) {
+                        CrtpPacket inPacket = new CrtpPacket(data);
+                        mInQueue.put(inPacket);
+
+                        waitTime = 0;
+                        emptyCtr = 0;
+                    } else {
+                        emptyCtr += 1;
+                        if (emptyCtr > 10) {
+                            emptyCtr = 10;
+                            // Relaxation time if the last 10 packets where empty
+                            waitTime = 0.01;
+                        } else {
+                            waitTime = 0;
+                        }
+                    }
+
+                    // get the next packet to send after relaxation (wait 10ms)
+                    CrtpPacket outPacket = mOutQueue.poll((long) waitTime, TimeUnit.SECONDS);
+
+                    if (outPacket != null) {
+                        dataOut = outPacket.toByteArray();
+                    } else {
+                        dataOut = Crazyradio.NULL_PACKET;
+                    }
+//                    Thread.sleep(10);
+                } catch (InterruptedException e) {
+                    mLogger.debug("RadioDriverThread was interrupted.");
+                    notifyLinkQualityUpdated(0);
+                    break;
+                }
+            }
+
+        }
+    }
+
+
+
+
 
 
     public static class becomeServerForPC extends Thread {

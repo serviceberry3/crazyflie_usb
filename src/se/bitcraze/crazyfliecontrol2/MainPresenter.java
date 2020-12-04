@@ -51,7 +51,7 @@ public class MainPresenter {
     private int mCpuFlash = 0;
     private boolean isZrangerAvailable = false;
     private boolean heightHold = false;
-    private WifiDirect wifiDirect;
+    private WifiDirect wifiDirectDriver;
 
     private Thread mSendJoystickDataThread;
     private ConsoleListener mConsoleListener;
@@ -59,7 +59,7 @@ public class MainPresenter {
     //constrctor
     public MainPresenter(MainActivity mainActivity) {
         this.mainActivity = mainActivity;
-        wifiDirect = new WifiDirect(mainActivity);
+        wifiDirectDriver = new WifiDirect(mainActivity);
     }
 
     public void onDestroy() {
@@ -230,19 +230,38 @@ public class MainPresenter {
                 }
             }
         });
+
+
         mSendJoystickDataThread.start();
     }
 
     public void connectWifiDirect() {
-        wifiDirect.discoverPeers();
+        wifiDirectDriver.discoverPeers();
     }
 
-    public void connectToPixel() {
-        wifiDirect.connectTo(wifiDirect.pixelDev);
+    public void connectToPixel(File mCacheDir) {
+        //Pixel has now been found. Request p2p connection with it
+        wifiDirectDriver.connectTo(wifiDirectDriver.pixelDev);
+
+        Log.i(LOG_TAG, "Connection finished, instantiating Crazyflie");
+
+        mCrazyflie = new Crazyflie(wifiDirectDriver, mCacheDir);
+
+        //call connect on the driver
+        mCrazyflie.connect();
+
+        //add console listener
+        if (mCrazyflie != null) {
+            mConsoleListener = new ConsoleListener();
+            mConsoleListener.setMainActivity(mainActivity);
+
+            //add data listener to our Crazyflie instance
+            mCrazyflie.addDataListener(mConsoleListener);
+        }
     }
 
     public WifiDirect getWifiDirect() {
-        return wifiDirect;
+        return wifiDirectDriver;
     }
 
     public void connectCrazyradio(int radioChannel, int radioDatarate, File mCacheDir) {
@@ -266,14 +285,20 @@ public class MainPresenter {
         Log.d(LOG_TAG, "connectBle()");
         // ensure previous link is disconnected
         disconnect();
+
+
         mDriver = null;
         mDriver = new BleLink(mainActivity, writeWithResponse);
+
+
         connect(mCacheDir, null);
     }
 
     private void connect(File mCacheDir, ConnectionData connectionData) {
+
+        //make sure the driver exists
         if (mDriver != null) {
-            // add listener for connection status
+            //add listener for connection status
             mDriver.addConnectionListener(crazyflieConnectionAdapter);
 
             mCrazyflie = new Crazyflie(mDriver, mCacheDir);
@@ -330,7 +355,9 @@ public class MainPresenter {
                 if (!hover) {
                     ((GamepadController) mainActivity.getController()).setTargetHeight(AbstractController.INITIAL_TARGET_HEIGHT);
                 }
-            } else {
+            }
+
+            else {
 //                Log.i(LOG_TAG, "flightmode.althold: getThrust(): " + mController.getThrustAbsolute());
                 mCrazyflie.setParamValue("flightmode.althold", hover ? 1 : 0);
             }

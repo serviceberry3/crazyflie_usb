@@ -293,6 +293,7 @@ public class BleLink extends CrtpDriver {
         }
     }
 
+    //run a Bluetooth connection
     @Override
     public void connect() {
         if (state != State.IDLE) {
@@ -310,6 +311,8 @@ public class BleLink extends CrtpDriver {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             mBluetoothLeScanner = mBluetoothAdapter.getBluetoothLeScanner();
+
+
             if (mScanCallback21 == null) {
                 mScanCallback21 = new ScanCallback() {
                     @Override
@@ -328,9 +331,11 @@ public class BleLink extends CrtpDriver {
                                     }
                                     state = State.CONNECTING;
                                     mDevice = device;
+
                                     mContext.runOnUiThread(new Runnable() {
                                         @Override
                                         public void run() {
+                                            //connect to the device
                                             mDevice.connectGatt(mContext, false, mGattCallback);
                                         }
                                     });
@@ -341,6 +346,8 @@ public class BleLink extends CrtpDriver {
                 };
             }
         }
+
+
         stopScan();
         scan();
         state = State.CONNECTING;
@@ -491,7 +498,11 @@ public class BleLink extends CrtpDriver {
                     characteristic.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE);
                     mWritten = true;
                 }
+
+
                 characteristic.setValue(ba);
+
+
                 if (mGatt != null) {
                     mGatt.writeCharacteristic(characteristic);
                 } else {

@@ -181,6 +181,12 @@ public class MainActivity extends Activity {
         mGamepadController = new GamepadController(mControls, this, mPreferences);
         mGamepadController.setDefaultPreferenceValues(getResources());
 
+
+
+
+
+
+
         //initialize buttons
         mToggleConnectButton = (ImageButton) findViewById(R.id.imageButton_connect);
         mRequestConnectButton = (ImageButton) findViewById(R.id.imageButton_request_connect);
@@ -376,7 +382,7 @@ public class MainActivity extends Activity {
 
     private void requestConnToPixel() {
         Log.i(LOG_TAG, "Requesting conn to Pixel...");
-        mPresenter.connectToPixel();
+        mPresenter.connectToPixel(mCacheDir);
     }
 
     private void connectBle() {
