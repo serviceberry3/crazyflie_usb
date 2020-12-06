@@ -4,7 +4,9 @@ import android.util.Log;
 
 import java.io.File;
 import java.io.IOException;
+import java.sql.Time;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import se.bitcraze.crazyflie.lib.crazyflie.ConnectionAdapter;
 import se.bitcraze.crazyflie.lib.crazyflie.Crazyflie;
@@ -210,6 +212,9 @@ public class MainPresenter {
         if (mCrazyflie != null) {
             mCrazyflie.sendPacket(packet);
         }
+        else {
+            Log.e(LOG_TAG, "CRAZYFLIE CAME UP NULL");
+        }
     }
 
     /**
@@ -220,6 +225,8 @@ public class MainPresenter {
         mSendJoystickDataThread = new Thread(new Runnable() {
             @Override
             public void run() {
+
+                int counter = 0;
                 while (mainActivity != null && mCrazyflie != null) {
                     //get the controller we're using
                     IController controller = mainActivity.getController();
@@ -240,30 +247,37 @@ public class MainPresenter {
                     boolean xmode = mainActivity.getControls().isXmode();
 
 
-                    if (heightHold) {
-                        float targetHeight = controller.getTargetHeight();
-                        sendPacket(new ZDistancePacket(roll, pitch, yaw, targetHeight));
+                    if (counter==0) {
+                        if (heightHold) {
+                            float targetHeight = controller.getTargetHeight();
+                            sendPacket(new ZDistancePacket(roll, pitch, yaw, targetHeight));
+                        }
+
+
+                        //****************************************************************************************************
+                        //DEFAULT. Send a CommanderPacket to the drone with the requested movement data
+                        else {
+                            //Log.i(LOG_TAG, String.format("sending CommanderPacket to drone with roll %f, pitch %f, yaw %f, thrustAbs %f", roll, pitch, yaw, thrustAbsolute));
+                            sendPacket(new CommanderPacket(roll, pitch, yaw, (char) thrustAbsolute, xmode));
+                        }
+                        //****************************************************************************************************8
+                        counter=-1;
                     }
 
+                    //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
+                    CrtpPacket testing = wifiDirectDriver.receivePacket(1);
 
-
-                    //****************************************************************************************************
-                    //DEFAULT. Send a CommanderPacket to the drone with the requested movement data
-                    else {
-                        Log.i(LOG_TAG, String.format("sending CommanderPacket to drone with roll %f, pitch %f, yaw %f, thrustAbs %f",
-                                roll, pitch, yaw, thrustAbsolute));
-                        sendPacket(new CommanderPacket(roll, pitch, yaw, (char) thrustAbsolute, xmode));
-                    }
-                    //****************************************************************************************************8
-
+                    /*
                     try {
-                        Thread.sleep(20);
+                        Thread.sleep(150); //CHANGED: WAS 20
                     }
 
-                    catch (InterruptedException e) {
+                    catch (InterruptedExcepion e) {
                         Log.d(LOG_TAG, "SendJoystickDataThread was interrupted.");
                         break;
-                    }
+                    }*/
+
+                    counter++;
                 }
             }
         });

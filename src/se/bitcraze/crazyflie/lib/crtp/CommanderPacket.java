@@ -49,7 +49,10 @@ public class CommanderPacket extends CrtpPacket {
      * @param clientXmode if true, then roll and pitch values are recalculated before sending them to the Crazyflie
      */
     public CommanderPacket(float roll, float pitch, float yaw, char thrust, boolean clientXmode) {
+        //call CrtpPacket constructor with channel 0, port COMMANDER (3)
         super(0, CrtpPort.COMMANDER);
+        //payload is 0 array, and serializedPacket is null at this pt
+
         this.mClientXmode = clientXmode;
 
         if (this.mClientXmode) {
@@ -78,6 +81,8 @@ public class CommanderPacket extends CrtpPacket {
         this(roll, pitch, yaw, thrust, false);
     }
 
+
+
     @Override
     protected void serializeData(ByteBuffer buffer) {
         buffer.putFloat(mRoll);
@@ -87,8 +92,8 @@ public class CommanderPacket extends CrtpPacket {
     }
 
     @Override
-    protected int getDataByteCount() {
-        return 3 * 4 + 1 * 2; // 3 floats with size 4, 1 char (= uint16_t) with size 2
+    public int getDataByteCount() {
+        return (3 * 4) + (1 * 2) + (1 * 2); // 3 floats with size 4, 1 char (= uint16_t) with size 2, +2 for fake radio header
     }
 
     @Override

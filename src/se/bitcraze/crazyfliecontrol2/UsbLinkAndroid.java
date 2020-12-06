@@ -165,7 +165,7 @@ public class UsbLinkAndroid implements CrazyUsbInterface {
      */
     public int sendBulkTransfer(byte[] data, byte[] receiveData){
         int returnCode = -1;
-        if(mConnection != null){
+        if(mConnection != null) {
             mConnection.bulkTransfer(mEpOut, data, data.length, TRANSFER_TIMEOUT);
             returnCode = mConnection.bulkTransfer(mEpIn, receiveData, receiveData.length, TRANSFER_TIMEOUT);
         }

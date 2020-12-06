@@ -197,7 +197,7 @@ public class Crazyflie {
     }
 
     /**
-     * Send a packet through the driver interface
+     * Send a packet to drone through the driver interface
      *
      * @param packet packet to send to the Crazyflie
      */
@@ -209,21 +209,22 @@ public class Crazyflie {
                 return;
             }
 
-            Log.i("CRAZYFLIe", "sending packet...");
+            //Log.i("CRAZYFLIe", "sending packet...");
             //send the packet to the CrazyFlie
             mDriver.sendPacket(packet);
 
-
+            //CHANGED: IGNORE RESENDS FOR NOW
+            /*
             if (packet.getExpectedReply() != null && packet.getExpectedReply().length > 0) {
                 //add packet to resend queue
-                if(!mResendQueue.contains(packet)) {
+                if (!mResendQueue.contains(packet)) {
                     mResendQueue.add(packet);
                 }
 
                 else {
                     mLogger.warn("Packet already exists in ResendQueue.");
                 }
-            }
+            }*/
         }
     }
 
@@ -235,10 +236,10 @@ public class Crazyflie {
      */
     private void checkReceivedPackets(CrtpPacket packet) {
         // compare received packet with expectedReplies in resend queue
-        for(CrtpPacket resendQueuePacket : mResendQueue) {
+        for (CrtpPacket resendQueuePacket : mResendQueue) {
             if (isPacketMatchingExpectedReply(resendQueuePacket, packet)) {
                 mResendQueue.remove(resendQueuePacket);
-                // mLogger.debug("QUEUE REMOVE: " + resendQueuePacket);
+                //mLogger.debug("QUEUE REMOVE: " + resendQueuePacket);
                 break;
             }
         }
@@ -248,7 +249,7 @@ public class Crazyflie {
         //Only check equality for the amount of bytes in expected reply
         byte[] expectedReply = resendQueuePacket.getExpectedReply();
         for (int i = 0; i < expectedReply.length;i++) {
-            if(expectedReply[i] != packet.getPayload()[i]) {
+            if (expectedReply[i] != packet.getPayload()[i]) {
                 return false;
             }
         }
@@ -263,12 +264,14 @@ public class Crazyflie {
             //infinitely check to see if there's anything in the resend queue and resend it
             while (true) {
                 if (!mResendQueue.isEmpty()) {
-                    //remove a packet from the resent FIFO queue
+                    //remove a packet from the resend FIFO queue
                     CrtpPacket resendPacket = mResendQueue.poll();
 
                     //resend the removed packet
                     if (resendPacket != null) {
                         mLogger.debug("RESEND: {} ID: {}", resendPacket, resendPacket.getPayload()[0]);
+
+                        //call sendPacket on the driver
                         sendPacket(resendPacket);
                     }
                 }
@@ -299,8 +302,11 @@ public class Crazyflie {
         //TODO: should be made more reliable
         if (this.mState == State.INITIALIZED) {
             mLogger.info("Initial packet has been received! => State.CONNECTED");
+
+            //set state to CONNECTED
             this.mState = State.CONNECTED;
             //self.link_established.call(self.link_uri)
+
             //FIXME: Crazyflie should not call mDriver.notifyConnected()
             this.mDriver.notifyConnected();
 
@@ -337,7 +343,9 @@ public class Crazyflie {
         String connection = "";
         if (mConnectionData != null) {
             connection = mConnectionData.toString();
-        } else {
+        }
+
+        else {
             connection = "BLE";
         }
         mLogger.info("We are connected [{}], requesting connection setup...", connection);
@@ -436,7 +444,9 @@ public class Crazyflie {
     private void notifyDataReceived(CrtpPacket packet) {
         boolean found = false;
 
+        //got through all of the datalisteners attached to this Crazyflie object
         for (DataListener dataListener : mDataListeners) {
+            //if this packet goes to this DataListener, call dataReceived on that Listener
             if (dataListener.getPort() == packet.getHeader().getPort()) {
                 dataListener.dataReceived(packet);
                 found = true;
@@ -456,10 +466,14 @@ public class Crazyflie {
 
 
         public void run() {
-            mLogger.debug("IncomingPacketHandlerThread was started.");
+            //mLogger.debug("IncomingPacketHandlerThread was started.");
 
+            //force start joystick data thread
+            checkForInitialPacketCallback(null);
+
+            /*
             //as long as the Thread isn't interrupted
-            while(!Thread.currentThread().isInterrupted()) {
+            while (!Thread.currentThread().isInterrupted()) {
                 //receive an ack packet from the driver (the oldest packet that was received from the drone)
                 CrtpPacket packet = getDriver().receivePacket(1);
 
@@ -469,14 +483,19 @@ public class Crazyflie {
                     //self.cf.packet_received.call(pk)
 
                     //let's see if this is the first packet arriving from the drone
-                    checkForInitialPacketCallback(packet);
+                    //checkForInitialPacketCallback(packet);
 
+                    //check if we were waiting for a packet like this
                     checkReceivedPackets(packet);
 
+                    //dispatch the packet to listener
                     notifyDataReceived(packet);
                 }
-            }
-            mLogger.debug("IncomingPacketHandlerThread was interrupted.");
+                else {
+                    Log.e("CFLIE", "PACKET NULL TIMEOUT");
+                }
+            }*/
+            //mLogger.debug("IncomingPacketHandlerThread was interrupted.");
         }
 
     }

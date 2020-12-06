@@ -363,7 +363,7 @@ public class RadioDriver extends CrtpDriver {
                     */
                     RadioAck ackStatus = mCradio.sendPacket(dataOut);
 
-                    // Analyze the data packet
+                    //Analyze the data packet
                     if (ackStatus == null) {
                         notifyConnectionLost("Dongle communication error (ackStatus == null)");
                         mLogger.warn("Dongle communication error (ackStatus == null)");
@@ -413,7 +413,9 @@ public class RadioDriver extends CrtpDriver {
 
                     if (outPacket != null) {
                         dataOut = outPacket.toByteArray();
-                    } else {
+                    }
+
+                    else {
                         dataOut = Crazyradio.NULL_PACKET;
                     }
 //                    Thread.sleep(10);

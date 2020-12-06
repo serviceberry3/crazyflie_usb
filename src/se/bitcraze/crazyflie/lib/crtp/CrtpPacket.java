@@ -27,6 +27,8 @@
 
 package se.bitcraze.crazyflie.lib.crtp;
 
+import android.util.Log;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
@@ -91,10 +93,13 @@ public class CrtpPacket {
             this.mPort = port;
         }
 
-        public byte getByte(){
-            if(isNullPacketHeader) {
+        public byte getByte () {
+            //check if we want the null packet
+            if (isNullPacketHeader) {
                 return (byte) 0xFF;
             }
+
+            //return a byte specifying port and channel
             return (byte) (((mPort.getNumber() & 0x0F) << 4) | (mChannel & 0x03));
         }
 
@@ -154,8 +159,13 @@ public class CrtpPacket {
      * @param port port to set in the header.
      */
     public CrtpPacket(int channel, CrtpPort port) {
+        //create a header with the channel and port
         this.mPacketHeader = new Header(channel, port);
+
+        //initialize payload to byte array of length 0
         this.mPacketPayload = new byte[0];
+
+        //serialized packet to null
         this.mSerializedPacket = null;
     }
 
@@ -233,12 +243,27 @@ public class CrtpPacket {
      * @return byte array containing the header and packet data.
      */
     public byte[] toByteArray() {
-        // if it's the first call, serialize the packet and cache it
+        //if it's the first call, serialize the packet and cache it
         if (mSerializedPacket == null) {
-            ByteBuffer buffer = ByteBuffer.allocate(getDataByteCount() + 1).order(BYTE_ORDER);
+            //Log.i("CRTPPACKET", String.format("Allocating %d in buffer", getDataByteCount() + 1));
+            //ByteBuffer buffer = ByteBuffer.allocate(getDataByteCount() + 1).order(BYTE_ORDER);
+
+            ByteBuffer buffer = ByteBuffer.allocate(17).order(BYTE_ORDER);
+
+            //fake radio headers
+            buffer.put((byte)0xBC);
+            buffer.put((byte)0xCF);
+
+            //put the informational byte that specifies port and channel
             buffer.put(getHeaderByte());
+
+            //puts the packet payload
             serializeData(buffer);
+
+
             mSerializedPacket = buffer.array();
+
+            //Log.i("CRTPPACKET", String.format("length of mSerializedPacket is %d", mSerializedPacket.length));
         }
         return mSerializedPacket;
     }

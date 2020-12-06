@@ -34,6 +34,7 @@ import se.bitcraze.crazyflie.lib.crtp.CrtpPacket;
 import se.bitcraze.crazyflie.lib.crtp.CrtpPort;
 import se.bitcraze.crazyfliecontrol2.MainActivity;
 
+//listens for data and prints it to the console on screen
 public class ConsoleListener extends DataListener {
 
     private static final String LOG_TAG = "ConsoleListener";
@@ -50,14 +51,17 @@ public class ConsoleListener extends DataListener {
 
     @Override
     public void dataReceived(CrtpPacket packet) {
-        //skip packet when it only contains zeros
+        //skip packet when it only contains zeros (null packet)
         if (containsOnly00(packet.getPayload())) {
             return;
         }
+
+        //parse the packet text and print it to the screen
         String parsedText = parseConsoleText(packet);
         Log.d(LOG_TAG, "Received console packet: " + parsedText);
         mMainActivity.appendToConsole(parsedText);
     }
+
 
     private String parseConsoleText(CrtpPacket packet) {
         byte[] payload = packet.getPayload();
@@ -67,7 +71,9 @@ public class ConsoleListener extends DataListener {
             consoleBuffer.append(trimmedText);
             result = consoleBuffer.toString();
             consoleBuffer = new StringBuffer();
-        } else {
+        }
+
+        else {
             consoleBuffer.append(trimmedText);
         }
         return result;
