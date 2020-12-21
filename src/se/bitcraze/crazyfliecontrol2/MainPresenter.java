@@ -269,10 +269,10 @@ public class MainPresenter {
 
                     /*
                     try {
-                        Thread.sleep(150); //CHANGED: WAS 20
+                        Thread.sleep(20); //CHANGED: WAS 20
                     }
 
-                    catch (InterruptedExcepion e) {
+                    catch (InterruptedException e) {
                         Log.d(LOG_TAG, "SendJoystickDataThread was interrupted.");
                         break;
                     }*/
