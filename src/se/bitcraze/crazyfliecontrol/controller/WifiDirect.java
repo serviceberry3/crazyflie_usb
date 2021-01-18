@@ -268,10 +268,9 @@ public class WifiDirect extends CrtpDriver {
                                         e.printStackTrace();
                                     }
 
-                                    //notify the presenter that we can start everything up
+                                    //WifiDirect cnxn finished; notify the presenter that we can start everything up
                                     mContext.getMainPresenter().onConnectToPixelFinished();
                                 }
-
 
                                 //If we're the client
                                 else if (info.groupFormed) {
@@ -280,9 +279,7 @@ public class WifiDirect extends CrtpDriver {
                                     //create Socket in background and request connection to server
                                     initiateClientSocket(info.groupOwnerAddress.getHostAddress());
                                 }
-
                                 connected = true;
-
                             }
                         }
                     });
@@ -298,12 +295,10 @@ public class WifiDirect extends CrtpDriver {
     //MAND METHODS FROM CRTPDRIVER-----------------------------------------------------------------------------------------------------------------------------------------
     @Override
     public void connect() throws IOException {
-
-        //Show connecting toast
+        //all this does is show connecting toast
         notifyConnectionRequested();
 
-
-        //Launch the comm thread
+        //Launch the WifiDirect comm thread between this phone and onboard phone
         startSendReceiveThread(); //CAUSING MAIN THD TO BLOCK
     }
 

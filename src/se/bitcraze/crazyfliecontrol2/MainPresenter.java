@@ -54,10 +54,16 @@ public class MainPresenter {
     private int mCpuFlash = 0;
     private boolean isZrangerAvailable = false;
     private boolean heightHold = false;
+
+    //is WifiDirect connection setup finished
+    private boolean wdConnected = false;
+
     private WifiDirect wifiDirectDriver;
 
     private Thread mSendJoystickDataThread;
     private ConsoleListener mConsoleListener;
+
+    private SendJoystickDataRunnable joystickRunnable;
 
     //constrctor
     public MainPresenter(MainActivity mainActivity) {
@@ -67,6 +73,10 @@ public class MainPresenter {
 
     public void onDestroy() {
         this.mainActivity = null;
+    }
+
+    public boolean isWdConnected() {
+        return wdConnected;
     }
 
 
@@ -217,29 +227,22 @@ public class MainPresenter {
         }
     }
 
-    /**
-     * Start thread to periodically send commands containing the user input
-     */
-    private void startSendJoystickDataThread() {
-        Log.i(LOG_TAG, "Joystick thread started");
-        /*
-        while(true) {
 
-            IController controller = mainActivity.getController();
-            float roll = controller.getRoll();
-            float pitch = controller.getPitch();
-            float yaw = controller.getYaw();
-            float thrustAbsolute = controller.getThrustAbsolute();
+    //Runnable that sends data from joysticks to the drone containing user input
+    class SendJoystickDataRunnable implements Runnable {
+        private Object mPauseLock;
+        private boolean mPaused;
+        private boolean mFinished;
 
-            Log.i(LOG_TAG, String.format("sending CommanderPacket to drone with roll %f, pitch %f, yaw %f, thrustAbs %f", roll, pitch, yaw, thrustAbsolute));
-        }*/
+        public SendJoystickDataRunnable() {
+            mPauseLock = new Object();
+            mPaused = false;
+            mFinished = false;
+        }
 
-
-        //instantiate the thread
-        mSendJoystickDataThread = new Thread(new Runnable() {
-            @Override
-            public void run() {
-
+        public void run() {
+            while (!mFinished) {
+                // Do stuff.
                 int counter = 0;
                 while (mainActivity != null && mCrazyflie != null) {
                     //get the controller we're using
@@ -261,7 +264,8 @@ public class MainPresenter {
                     boolean xmode = mainActivity.getControls().isXmode();
 
 
-                    if (counter==0) {
+                    if (counter == 0) {
+                        //check if we're trying to hold drone at a specific height
                         if (heightHold) {
                             float targetHeight = controller.getTargetHeight();
                             sendPacket(new ZDistancePacket(roll, pitch, yaw, targetHeight));
@@ -275,13 +279,13 @@ public class MainPresenter {
                             sendPacket(new CommanderPacket(roll, pitch, yaw, (char) thrustAbsolute, xmode));
                         }
                         //****************************************************************************************************
-                        counter=-1;
+                        counter =- 1;
                     }
 
                     //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
                     CrtpPacket testing = wifiDirectDriver.receivePacket(1);
 
-/*
+                    /*
                     /////////
                     try {
                         Thread.sleep(20); //CHANGED: WAS 20
@@ -293,14 +297,76 @@ public class MainPresenter {
                     }
                     ///////////*/
 
-
                     counter++;
                 }
+
+                //get the lock on the pauser object
+                synchronized (mPauseLock) {
+                    //check to see if a pause was indeed requested. If so, wait until notify from onResume()
+                    while (mPaused) {
+                        try {
+                            //causes current thread to wait until another thread invokes notify() or notifyAll() for this obj
+                            mPauseLock.wait();
+                        }
+                        catch (InterruptedException e) {
+                        }
+                    }
+                }
             }
-        });
+        }
+
+        //pause the thread to stop streaming joystick data to onboard phone so that we can run a navigation sequence, etc.
+        public void onPause() {
+            synchronized (mPauseLock) {
+                mainActivity.showToastie("Joystick stream stopped");
+                mPaused = true;
+            }
+        }
+
+        //resume the thread
+        public void onResume() {
+            //get lock on the pauser object, set paused to false, and notify mPauseLock object
+            synchronized (mPauseLock) {
+                mPaused = false;
+                //wake up all threads that are waiting on this object's monitor
+                mPauseLock.notifyAll();
+            }
+        }
+    }
+
+
+    /**
+     * Start thread to periodically send commands containing the user input
+     */
+    private void startSendJoystickDataThread() {
+        Log.i(LOG_TAG, "Joystick thread started");
+        mainActivity.showToastie("Joystick stream started");
+
+        joystickRunnable = new SendJoystickDataRunnable();
+
+        //instantiate the joystick data sending thread
+        mSendJoystickDataThread = new Thread(joystickRunnable);
 
         //start the thread
         mSendJoystickDataThread.start();
+    }
+
+    public void launch() {
+        //pause the joystick sending thread so that we can safely run the launch sequence
+        joystickRunnable.onPause();
+
+        //TODO: launch sequence
+
+        joystickRunnable.onResume();
+    }
+
+    public void land() {
+        //pause the joystick sending thread so that we can safely run the landing sequence
+        joystickRunnable.onPause();
+
+        //TODO: landing sequence
+
+        joystickRunnable.onResume();
     }
 
     public void connectWifiDirect() {
@@ -325,8 +391,9 @@ public class MainPresenter {
         //we need to wait here
     }
 
+    //callback for when WifiDirect connection has finished
     public void onConnectToPixelFinished() {
-        //call connect on the driver
+        //call connect on the driver, which just shows toast and starts the WifiDirect communication thread
         mCrazyflie.connect();
 
         //add console listener
@@ -337,6 +404,9 @@ public class MainPresenter {
             //add data listener to our Crazyflie instance
             mCrazyflie.addDataListener(mConsoleListener);
         }
+
+        //at this point all Wifi Direct comms are set up, let's set wdConnected to true
+        wdConnected = true;
     }
 
     public WifiDirect getWifiDirect() {

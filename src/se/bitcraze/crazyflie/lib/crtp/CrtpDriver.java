@@ -39,7 +39,6 @@ import se.bitcraze.crazyflie.lib.crazyflie.ConnectionListener;
  *
  */
 public abstract class CrtpDriver {
-
     protected Set<ConnectionListener> mConnectionListeners = new CopyOnWriteArraySet<ConnectionListener>();
 
     /**

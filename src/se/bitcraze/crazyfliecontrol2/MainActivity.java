@@ -116,6 +116,8 @@ public class MainActivity extends Activity {
 
     private Button mDiscPeersButton;
     private Button mRequestConnectButton;
+    private Button mLaunchButton;
+    private Button mLandButton;
     private ImageButton mRingEffectButton;
     private ImageButton mHeadlightButton;
     private ImageButton mBuzzerSoundButton;
@@ -134,9 +136,7 @@ public class MainActivity extends Activity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
-
         Log.i(LOG_TAG, "Good morning from the Main commander");
-
 
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
@@ -162,7 +162,6 @@ public class MainActivity extends Activity {
         setBatteryLevel(-1.0f);
         setLinkQualityText("N/A");
 
-
         //instantiate a Controls
         mControls = new Controls(this, mPreferences);
         mControls.setDefaultPreferenceValues(getResources());
@@ -179,15 +178,11 @@ public class MainActivity extends Activity {
         mGamepadController = new GamepadController(mControls, this, mPreferences);
         mGamepadController.setDefaultPreferenceValues(getResources());
 
-
-
-
-
-
-
         //initialize buttons
         mDiscPeersButton = (Button) findViewById(R.id.disc_peers_button);
         mRequestConnectButton = (Button) findViewById(R.id.rqst_conn_button);
+        mLaunchButton = (Button) findViewById(R.id.launcher_button);
+        mLandButton = (Button) findViewById(R.id.lander_button);
         initializeMenuButtons();
 
         //view to display flight data
@@ -327,6 +322,31 @@ public class MainActivity extends Activity {
             }
         });
 
+        mLaunchButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if (mPresenter.isWdConnected()) {
+                    showToastie("Launching...");
+                    mPresenter.launch();
+                }
+                else {
+                    showToastie("Please complete your Wifi Direct connection first");
+                }
+            }
+        });
+
+        mLandButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if (mPresenter.isWdConnected()) {
+                    showToastie("Landing...");
+                    mPresenter.land();
+                }
+                else {
+                    showToastie("Please complete your Wifi Direct connection first");
+                }
+            }
+        });
 
         //set click listener for settings button
         ImageButton settingsButton = (ImageButton) findViewById(R.id.imageButton_settings);
