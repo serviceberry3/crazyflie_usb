@@ -84,10 +84,9 @@ public class MainPresenter {
             //bluetooth stuff
             if (mCrazyflie != null && mCrazyflie.getDriver() instanceof BleLink) {
                 mainActivity.setConnectionButtonConnectedBle();
-                // FIXME: Hack to circumvent BLE reconnect problem
+                //FIXME: Hack to circumvent BLE reconnect problem
                 mCrazyflie.startConnectionSetup_BLE();
             }
-
 
             //set button look
             else {
@@ -159,7 +158,7 @@ public class MainPresenter {
         }
     };
 
-    // TODO: Replace with specific test for buzzer deck
+    //TODO: Replace with specific test for buzzer deck
     private void checkForBuzzerDeck() {
         //activate buzzer sound button when a CF2 is recognized (a buzzer can not yet be detected separately)
         mCrazyflie.getParam().addParamListener(new ParamListener("cpu", "flash") {
@@ -182,7 +181,7 @@ public class MainPresenter {
             @Override
             public void updated(String name, Number value) {
                 isZrangerAvailable = mCrazyflie.getParam().getValue("deck.bcZRanger").intValue() == 1;
-                // TODO: indicate in the UI that the zRanger sensor is installed
+                //TODO: indicate in the UI that the zRanger sensor is installed
                 if (isZrangerAvailable) {
                     mainActivity.showToastie("Found zRanger sensor.");
                 }
@@ -223,7 +222,7 @@ public class MainPresenter {
      */
     private void startSendJoystickDataThread() {
         Log.i(LOG_TAG, "Joystick thread started");
-/*
+        /*
         while(true) {
 
             IController controller = mainActivity.getController();

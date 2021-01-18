@@ -260,7 +260,6 @@ public class CrtpPacket {
             //puts the packet payload
             serializeData(buffer);
 
-
             mSerializedPacket = buffer.array();
 
             //Log.i("CRTPPACKET", String.format("length of mSerializedPacket is %d", mSerializedPacket.length));
