@@ -59,43 +59,54 @@
         android:layout_toRightOf="@+id/linkQuality_icon"
         android:layout_toEndOf="@+id/linkQuality_icon" />
 
+    <Button
+        android:id="@+id/launcher_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/launcher_button"
+        android:layout_below="@+id/battery_icon"/>
 
+    <Button
+        android:id="@+id/lander_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/lander_button"
+        android:layout_toRightOf="@+id/launcher_button"
+        android:layout_toEndOf="@+id/launcher_button"
+        android:layout_below="@+id/linkQuality_text"
+        android:layout_marginLeft="10dp" />
 
-    <ImageButton
-        android:id="@+id/imageButton_connect"
+    <Button
+        android:id="@+id/disc_peers_button"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_alignParentTop="true"
-        android:layout_toLeftOf="@+id/imageButton_settings"
-        android:layout_toStartOf="@+id/imageButton_settings"
+        android:layout_toLeftOf="@+id/rqst_conn_button"
+        android:layout_toStartOf="@+id/rqst_conn_button"
         android:layout_marginBottom="5dp"
         android:layout_marginLeft="10dp"
         android:layout_marginStart="10dp"
         android:layout_marginRight="6dp"
+        android:layout_marginTop="3dp"
         android:layout_marginEnd="6dp"
-        android:layout_marginTop="5dp"
-        android:background="@drawable/custom_button"
-        android:src="@drawable/ic_action_import_export"
         android:elevation="2dp"
-        android:contentDescription="@string/menu_connect_ContentDescription"/>
+        android:text="@string/peer_disc_button"/>
 
-    <ImageButton
-        android:id="@+id/imageButton_request_connect"
+    <Button
+        android:id="@+id/rqst_conn_button"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_alignParentTop="true"
-        android:layout_toLeftOf="@+id/imageButton_settings"
-        android:layout_toStartOf="@+id/imageButton_settings"
-        android:layout_marginBottom="5dp"
-        android:layout_marginLeft="10dp"
         android:layout_marginStart="10dp"
-        android:layout_marginRight="60dp"
-        android:layout_marginEnd="6dp"
-        android:layout_marginTop="30dp"
-        android:background="@drawable/custom_button"
-        android:src="@drawable/ic_action_import_export"
+        android:layout_marginLeft="10dp"
+        android:layout_marginEnd="24dp"
+        android:layout_marginRight="10dp"
+        android:layout_marginTop="3dp"
+        android:layout_marginBottom="5dp"
+        android:layout_toStartOf="@+id/imageButton_settings"
+        android:layout_toLeftOf="@+id/imageButton_settings"
         android:elevation="2dp"
-        android:contentDescription="request conn to Pixel"/>
+        android:text="@string/rqst_conn_button"/>
 
     <ImageButton
         android:id="@+id/imageButton_settings"

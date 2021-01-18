@@ -74,7 +74,7 @@ public class CrtpPacket {
         }
 
         public Header(byte header) {
-            if (header != -1){
+            if (header != -1) {
                 this.mPort = CrtpPort.getByNumber((byte) (header >> 4));
                 this.mChannel = header & 0x03;
             }
@@ -251,8 +251,8 @@ public class CrtpPacket {
             ByteBuffer buffer = ByteBuffer.allocate(17).order(BYTE_ORDER);
 
             //fake radio headers
-            buffer.put((byte)0xBC);
-            buffer.put((byte)0xCF);
+            //buffer.put((byte)0xBC);
+            //buffer.put((byte)0xCF);
 
             //put the informational byte that specifies port and channel
             buffer.put(getHeaderByte());

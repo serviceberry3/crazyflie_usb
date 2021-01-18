@@ -78,7 +78,7 @@ public class WifiDirect extends CrtpDriver {
     IntentFilter p2pEnabled;
 
     private Handler handler = new Handler();
-    public final String pixel = "Android_ea5c";
+    public final String pixel = "Android_333a";
     public WifiP2pDevice pixelDev = null;
 
     //This class provides API for managing Wi-Fi peer-to-peer (Wifi Direct) connectivity. This lets app discover available peers,
@@ -175,9 +175,9 @@ public class WifiDirect extends CrtpDriver {
                                 Log.i(TAG, dev.deviceName);
 
 
-                                if (dev.deviceName.equals("Android_ea5c")) {
-                                    Log.i(TAG, "Found Android_ea5c, setting dev...");
-                                    Toast.makeText(mContext, "Ready to hit lower button.", Toast.LENGTH_LONG).show();
+                                if (dev.deviceName.equals(pixel)) {
+                                    Log.i(TAG, "Found onboard Pixel, setting dev...");
+                                    Toast.makeText(mContext, "Onboard Pixel found", Toast.LENGTH_LONG).show();
 
                                     pixelDev = dev;
 
@@ -201,16 +201,17 @@ public class WifiDirect extends CrtpDriver {
         }
 
         Log.i(TAG, "Running discoverPeers()...");
+        mContext.showToastie("Discovering peers...");
 
         //run discoverPeers() method of WifiP2pManager
         wifiP2pManager.discoverPeers(wifiDirectChannel, actionListener);
     }
 
 
-
-
     //request connection to a wifi direct peer
     public void connectTo(WifiP2pDevice device) {
+        Log.i(TAG, "connectTo called, initiating connection with onboard pixel...");
+
         //create new p2p configuration
         WifiP2pConfig config = new WifiP2pConfig();
 
@@ -225,6 +226,7 @@ public class WifiDirect extends CrtpDriver {
 
         //connect to the p2p device using the above address we got from the device
         wifiP2pManager.connect(wifiDirectChannel, config, actionListener);
+
         Log.i(TAG, "connectTo finished");
     }
 

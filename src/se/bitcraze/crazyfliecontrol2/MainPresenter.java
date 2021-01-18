@@ -1,5 +1,6 @@
 package se.bitcraze.crazyfliecontrol2;
 
+import android.nfc.Tag;
 import android.util.Log;
 
 import java.io.File;
@@ -80,7 +81,7 @@ public class MainPresenter {
         public void connected() {
             mainActivity.showToastie("Connected");
 
-            //bluetooth stuf
+            //bluetooth stuff
             if (mCrazyflie != null && mCrazyflie.getDriver() instanceof BleLink) {
                 mainActivity.setConnectionButtonConnectedBle();
                 // FIXME: Hack to circumvent BLE reconnect problem
@@ -221,6 +222,20 @@ public class MainPresenter {
      * Start thread to periodically send commands containing the user input
      */
     private void startSendJoystickDataThread() {
+        Log.i(LOG_TAG, "Joystick thread started");
+/*
+        while(true) {
+
+            IController controller = mainActivity.getController();
+            float roll = controller.getRoll();
+            float pitch = controller.getPitch();
+            float yaw = controller.getYaw();
+            float thrustAbsolute = controller.getThrustAbsolute();
+
+            Log.i(LOG_TAG, String.format("sending CommanderPacket to drone with roll %f, pitch %f, yaw %f, thrustAbs %f", roll, pitch, yaw, thrustAbsolute));
+        }*/
+
+
         //instantiate the thread
         mSendJoystickDataThread = new Thread(new Runnable() {
             @Override
@@ -257,17 +272,18 @@ public class MainPresenter {
                         //****************************************************************************************************
                         //DEFAULT. Send a CommanderPacket to the drone with the requested movement data
                         else {
-                            //Log.i(LOG_TAG, String.format("sending CommanderPacket to drone with roll %f, pitch %f, yaw %f, thrustAbs %f", roll, pitch, yaw, thrustAbsolute));
+                            Log.i(LOG_TAG, String.format("sending CommanderPacket to drone with roll %f, pitch %f, yaw %f, thrustAbs %f", roll, pitch, yaw, thrustAbsolute));
                             sendPacket(new CommanderPacket(roll, pitch, yaw, (char) thrustAbsolute, xmode));
                         }
-                        //****************************************************************************************************8
+                        //****************************************************************************************************
                         counter=-1;
                     }
 
                     //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
                     CrtpPacket testing = wifiDirectDriver.receivePacket(1);
 
-                    /*
+/*
+                    /////////
                     try {
                         Thread.sleep(20); //CHANGED: WAS 20
                     }
@@ -275,7 +291,9 @@ public class MainPresenter {
                     catch (InterruptedException e) {
                         Log.d(LOG_TAG, "SendJoystickDataThread was interrupted.");
                         break;
-                    }*/
+                    }
+                    ///////////*/
+
 
                     counter++;
                 }
@@ -291,6 +309,11 @@ public class MainPresenter {
     }
 
     public void connectToPixel(File mCacheDir) {
+        //make sure wifiDirectDriver and its pixelDev are non-null
+        if (wifiDirectDriver==null || wifiDirectDriver.pixelDev == null) {
+            mainActivity.showToastie("Please run peer discovery first and wait until you see \"Onboard Pixel found\" toast");
+            return;
+        }
 
         //add listener for connection status
         wifiDirectDriver.addConnectionListener(crazyflieConnectionAdapter);
@@ -301,8 +324,6 @@ public class MainPresenter {
         wifiDirectDriver.connectTo(wifiDirectDriver.pixelDev);
 
         //we need to wait here
-
-
     }
 
     public void onConnectToPixelFinished() {

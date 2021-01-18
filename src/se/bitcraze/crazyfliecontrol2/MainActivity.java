@@ -51,7 +51,6 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.IntentSender;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
@@ -62,9 +61,6 @@ import android.location.LocationManager;
 import android.media.AudioManager;
 import android.media.SoundPool;
 import android.media.SoundPool.OnLoadCompleteListener;
-import android.net.NetworkInfo;
-import android.net.wifi.p2p.WifiP2pDeviceList;
-import android.net.wifi.p2p.WifiP2pInfo;
 import android.net.wifi.p2p.WifiP2pManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -83,6 +79,7 @@ import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.AdapterView;
+import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -117,8 +114,8 @@ public class MainActivity extends Activity {
     private int mSoundConnect;
     private int mSoundDisconnect;
 
-    private ImageButton mToggleConnectButton;
-    private ImageButton mRequestConnectButton;
+    private Button mDiscPeersButton;
+    private Button mRequestConnectButton;
     private ImageButton mRingEffectButton;
     private ImageButton mHeadlightButton;
     private ImageButton mBuzzerSoundButton;
@@ -189,8 +186,8 @@ public class MainActivity extends Activity {
 
 
         //initialize buttons
-        mToggleConnectButton = (ImageButton) findViewById(R.id.imageButton_connect);
-        mRequestConnectButton = (ImageButton) findViewById(R.id.imageButton_request_connect);
+        mDiscPeersButton = (Button) findViewById(R.id.disc_peers_button);
+        mRequestConnectButton = (Button) findViewById(R.id.rqst_conn_button);
         initializeMenuButtons();
 
         //view to display flight data
@@ -297,18 +294,16 @@ public class MainActivity extends Activity {
         });
 
 
-        //set connect button (the one with two arrows) click listener
-        mToggleConnectButton.setOnClickListener(new View.OnClickListener() {
+        //set discover peers button click listener
+        mDiscPeersButton.setOnClickListener(new View.OnClickListener() {
 
             @Override
             public void onClick(View v) {
-
                 try {
                     //if we're already connected
                     if (mPresenter != null && mPresenter.getCrazyflie() != null && mPresenter.getCrazyflie().isConnected()) {
                         mPresenter.disconnect();
                     }
-
 
                     //run the connection: either Crazyradio or Bluetooth
                     else {
@@ -316,7 +311,6 @@ public class MainActivity extends Activity {
                         if (isCrazyradioAvailable(MainActivity.this)) {
                             connectCrazyradio();
                         }
-
 
                         else {
                             connectBlePreChecks();
@@ -388,7 +382,7 @@ public class MainActivity extends Activity {
     }
 
     private void requestConnToPixel() {
-        Log.i(LOG_TAG, "Requesting conn to Pixel...");
+        Log.i(LOG_TAG, "Attempting to request conn to Pixel...");
         mPresenter.connectToPixel(mCacheDir);
     }
 
@@ -798,13 +792,13 @@ public class MainActivity extends Activity {
 
 
             if (state == WifiP2pManager.WIFI_P2P_STATE_ENABLED) {
-                mToggleConnectButton.setEnabled(true);
+                mDiscPeersButton.setEnabled(true);
                 mRequestConnectButton.setEnabled(true);
             }
 
             else {
                 Log.e(LOG_TAG, "FALSE");
-                mToggleConnectButton.setEnabled(false);
+                mDiscPeersButton.setEnabled(false);
                 mRequestConnectButton.setEnabled(false);
             }
 
@@ -936,7 +930,7 @@ public class MainActivity extends Activity {
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                mToggleConnectButton.setBackgroundDrawable(getResources().getDrawable(drawable));
+                mDiscPeersButton.setBackgroundDrawable(getResources().getDrawable(drawable));
             }
         });
     }
