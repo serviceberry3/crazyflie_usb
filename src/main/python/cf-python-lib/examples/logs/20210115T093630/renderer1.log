@@ -1,0 +1,1 @@
+[2021-01-15 09:36:30.974] [renderer1] [error] [File Watcher (node.js)] Error: ENOENT: no such file or directory, stat '/home/nodog/docs/files/DroneJob/crazyflie-lib-python-leo/examples/.vscode'

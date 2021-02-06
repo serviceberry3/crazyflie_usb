@@ -43,7 +43,9 @@ public abstract class AbstractController implements IController {
     protected static final int MAX_THRUST = 65000;
     protected static final float MIN_TARGET_HEIGHT = 0.1f; // 10cm
     protected static final float MAX_TARGET_HEIGHT = 1.0f; // 100cm
-    public static final float INITIAL_TARGET_HEIGHT = 0.4f; // 40cm
+    public static final float INITIAL_TARGET_HEIGHT = 0.3f; // 40cm
+
+    //initialize targetHeight to value specified above
     protected float targetHeight = INITIAL_TARGET_HEIGHT;
 
     public AbstractController(Controls controls, MainActivity activity) {

@@ -5,7 +5,7 @@ import java.nio.ByteBuffer;
 /**
  * Control mode where the height is sent as an absolute
  * setpoint (intended to be the distance to the surface
- * under the Crazflie).
+ * under the Crazyflie).
  * 
  * Created by arnaud on 31/03/17.
  */
@@ -44,7 +44,7 @@ public class ZDistancePacket extends CrtpPacket {
 
     @Override
     protected int getDataByteCount() {
-        return 1 + 4 * 4; // 1 byte (type), 4 floats with size 4, 1 byte (type)
+        return 1 + 4 * 4; // 1 byte (type), 4 floats with size 4, 1 byte (type) = 17
     }
 
     @Override

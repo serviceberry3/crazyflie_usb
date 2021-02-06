@@ -340,7 +340,6 @@ public class WifiDirect extends CrtpDriver {
 
     int ctr = 0;
 
-
     @Override
     public void sendPacket(CrtpPacket packet) {
         //TODO: does it make sense to be able to queue packets even though the connection is not established yet?
@@ -487,8 +486,6 @@ public class WifiDirect extends CrtpDriver {
             this.mRetryBeforeDisconnect = RETRYCOUNT_BEFORE_DISCONNECT;
         }
 
-
-
         /**
          * Run the receiver thread
          *
@@ -520,7 +517,7 @@ public class WifiDirect extends CrtpDriver {
                     */
 
                     //***********************************************************************************************************************************
-                    //send next packet to the drone
+                    //send next packet to the drone, blocking until get response
                     RadioAck ackStatus = sendPacketHelper(dataOut, outputStream, inputStream);      //TODO: implement new packet sender for WIFI DIRECT SOCKET
 
                     /*CHANGED BY NOAH: SKIP ACK ANALYSIS FOR NOW
@@ -600,6 +597,8 @@ public class WifiDirect extends CrtpDriver {
                             waitTime = 0;
                         }
                     }*/
+
+                    //SKIP: create fake incoming packet
 
                     CrtpPacket inPacket = new CrtpPacket(new byte[1]);
                     mInQueue.put(inPacket);
@@ -706,7 +705,6 @@ public class WifiDirect extends CrtpDriver {
         //mUsbInterface.sendBulkTransfer(dataOut, data); //TODO: change to send the transfer over WIFI DIRECT SOCKET
 
 
-
         return null;
         /*SKIP ACK FOR NOW
 
@@ -747,7 +745,6 @@ public class WifiDirect extends CrtpDriver {
         catch (IOException e) {
             e.printStackTrace();
         }
-
 
 
         Log.i(TAG,"SenddataandWait waiting for read in from drone...");

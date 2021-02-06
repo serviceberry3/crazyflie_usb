@@ -86,6 +86,8 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.MobileAnarchy.Android.Widgets.Joystick.JoystickView;
+import com.chaquo.python.Python;
+import com.chaquo.python.android.AndroidPlatform;
 
 public class MainActivity extends Activity {
 
@@ -118,6 +120,7 @@ public class MainActivity extends Activity {
     private Button mRequestConnectButton;
     private Button mLaunchButton;
     private Button mLandButton;
+    private Button mKillButton;
     private ImageButton mRingEffectButton;
     private ImageButton mHeadlightButton;
     private ImageButton mBuzzerSoundButton;
@@ -140,6 +143,11 @@ public class MainActivity extends Activity {
 
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        //start Python3 interpreter
+        if (!Python.isStarted()) {
+            Python.start(new AndroidPlatform(this));
+        }
 
         //instantiate a MainPresenter
         mPresenter = new MainPresenter(this);
@@ -183,6 +191,7 @@ public class MainActivity extends Activity {
         mRequestConnectButton = (Button) findViewById(R.id.rqst_conn_button);
         mLaunchButton = (Button) findViewById(R.id.launcher_button);
         mLandButton = (Button) findViewById(R.id.lander_button);
+        mKillButton = (Button) findViewById(R.id.kill_button);
         initializeMenuButtons();
 
         //view to display flight data
@@ -341,6 +350,19 @@ public class MainActivity extends Activity {
                 if (mPresenter.isWdConnected()) {
                     showToastie("Landing...");
                     mPresenter.land();
+                }
+                else {
+                    showToastie("Please complete your Wifi Direct connection first");
+                }
+            }
+        });
+
+        mKillButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if (mPresenter.isWdConnected()) {
+                    showToastie("Killing...");
+                    mPresenter.kill();
                 }
                 else {
                     showToastie("Please complete your Wifi Direct connection first");
@@ -950,7 +972,8 @@ public class MainActivity extends Activity {
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                mDiscPeersButton.setBackgroundDrawable(getResources().getDrawable(drawable));
+                //turn the connection rqst button to green, indicating the the connection hs been established
+                mRequestConnectButton.setBackgroundColor(Color.GREEN);
             }
         });
     }

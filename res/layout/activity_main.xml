@@ -77,6 +77,16 @@
         android:layout_marginLeft="10dp" />
 
     <Button
+        android:id="@+id/kill_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/kill_button"
+        android:layout_toRightOf="@+id/lander_button"
+        android:layout_toEndOf="@+id/lander_button"
+        android:layout_below="@+id/linkQuality_text"
+        android:layout_marginLeft="10dp" />
+
+    <Button
         android:id="@+id/disc_peers_button"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

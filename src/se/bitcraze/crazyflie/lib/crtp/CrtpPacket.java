@@ -246,9 +246,9 @@ public class CrtpPacket {
         //if it's the first call, serialize the packet and cache it
         if (mSerializedPacket == null) {
             //Log.i("CRTPPACKET", String.format("Allocating %d in buffer", getDataByteCount() + 1));
-            //ByteBuffer buffer = ByteBuffer.allocate(getDataByteCount() + 1).order(BYTE_ORDER);
+            ByteBuffer buffer = ByteBuffer.allocate(getDataByteCount() + 1).order(BYTE_ORDER);
 
-            ByteBuffer buffer = ByteBuffer.allocate(17).order(BYTE_ORDER);
+            //ByteBuffer buffer = ByteBuffer.allocate(17).order(BYTE_ORDER);
 
             //fake radio headers
             //buffer.put((byte)0xBC);

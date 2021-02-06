@@ -3,9 +3,11 @@ buildscript {
         mavenCentral()
         jcenter()
         google()
+        maven { url "https://chaquo.com/maven" }
     }
     dependencies {
         classpath 'com.android.tools.build:gradle:3.4.1'
+        classpath 'com.chaquo.python:gradle:6.3.0'
     }
 }
 allprojects {
@@ -13,12 +15,14 @@ allprojects {
         mavenCentral()
         jcenter()
         google()
+        maven { url "https://chaquo.com/maven" }
     }
 }
 apply plugin: 'com.android.application'
+apply plugin: 'com.android.application'
+apply plugin: 'com.chaquo.python'
 
-android {
-
+    android {
     compileSdkVersion 28
     buildToolsVersion '28.0.3'
 
@@ -62,8 +66,24 @@ android {
         exclude 'META-INF/NOTICE'
     }
     defaultConfig {
-        minSdkVersion 14
+        minSdkVersion 16
         targetSdkVersion 28
+
+        ndk {
+            abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
+        }
+
+        sourceSets {
+            main {
+                python {
+                    srcDirs = ["src/main/python"]
+                }
+            }
+        }
+        python {
+            buildPython "/usr/local/bin/python3"
+            buildPython "python3"
+        }
     }
 }
 

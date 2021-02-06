@@ -1,13 +1,19 @@
 package se.bitcraze.crazyfliecontrol2;
 
 import android.nfc.Tag;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
+
+import com.chaquo.python.PyObject;
+import com.chaquo.python.Python;
 
 import java.io.File;
 import java.io.IOException;
 import java.sql.Time;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.LogRecord;
 
 import se.bitcraze.crazyflie.lib.crazyflie.ConnectionAdapter;
 import se.bitcraze.crazyflie.lib.crazyflie.Crazyflie;
@@ -16,6 +22,7 @@ import se.bitcraze.crazyflie.lib.crazyradio.RadioDriver;
 import se.bitcraze.crazyflie.lib.crtp.CommanderPacket;
 import se.bitcraze.crazyflie.lib.crtp.CrtpDriver;
 import se.bitcraze.crazyflie.lib.crtp.CrtpPacket;
+import se.bitcraze.crazyflie.lib.crtp.HeightHoldPacket;
 import se.bitcraze.crazyflie.lib.crtp.ZDistancePacket;
 import se.bitcraze.crazyflie.lib.log.LogAdapter;
 import se.bitcraze.crazyflie.lib.log.LogConfig;
@@ -65,7 +72,7 @@ public class MainPresenter {
 
     private SendJoystickDataRunnable joystickRunnable;
 
-    //constrctor
+    //constructor
     public MainPresenter(MainActivity mainActivity) {
         this.mainActivity = mainActivity;
         wifiDirectDriver = new WifiDirect(mainActivity);
@@ -230,7 +237,7 @@ public class MainPresenter {
 
     //Runnable that sends data from joysticks to the drone containing user input
     class SendJoystickDataRunnable implements Runnable {
-        private Object mPauseLock;
+        private final Object mPauseLock;
         private boolean mPaused;
         private boolean mFinished;
 
@@ -267,6 +274,7 @@ public class MainPresenter {
                     if (counter == 0) {
                         //check if we're trying to hold drone at a specific height
                         if (heightHold) {
+                            //right now always returns 0.3
                             float targetHeight = controller.getTargetHeight();
                             sendPacket(new ZDistancePacket(roll, pitch, yaw, targetHeight));
                         }
@@ -298,20 +306,26 @@ public class MainPresenter {
                     ///////////*/
 
                     counter++;
-                }
 
-                //get the lock on the pauser object
-                synchronized (mPauseLock) {
-                    //check to see if a pause was indeed requested. If so, wait until notify from onResume()
-                    while (mPaused) {
-                        try {
-                            //causes current thread to wait until another thread invokes notify() or notifyAll() for this obj
-                            mPauseLock.wait();
-                        }
-                        catch (InterruptedException e) {
+                    //Log.i(LOG_TAG, "Count");
+
+                    //get the lock on the pauser object
+                    synchronized (mPauseLock) {
+                        //Log.i(LOG_TAG, "Testing joystick stopper");
+
+                        //check to see if a pause was indeed requested. If so, wait until notify from onResume()
+                        while (mPaused) {
+                            try {
+                                //causes current thread to wait until another thread invokes notify() or notifyAll() for this obj
+                                mPauseLock.wait();
+                            }
+                            catch (InterruptedException e) {
+                            }
                         }
                     }
                 }
+
+
             }
         }
 
@@ -351,12 +365,190 @@ public class MainPresenter {
         mSendJoystickDataThread.start();
     }
 
+    public void startHeightHoldThread() {
+
+    }
+
     public void launch() {
         //pause the joystick sending thread so that we can safely run the launch sequence
         joystickRunnable.onPause();
 
         //TODO: launch sequence
+        Log.i(LOG_TAG, "Launching...");
 
+        final int[] cnt = {0};
+        int thrust_mult = 1;
+        int thrust_step = 100;
+        int thrust_dstep = 10;
+        int thrust = 3000;
+        int pitch = 0;
+        int roll = 0;
+        int yawrate = 0;
+        final float start_height = 0.05f;
+
+        //the distance is not accurate, 1.2 => 1.5m
+        final float target_height = 0.3f;
+
+        /*
+        //get Python interpreter
+        Python python = Python.getInstance();
+        PyObject pythonFile = python.getModule("cf-python-lib/examples/flytest.py");
+        pythonFile.call();*/
+
+
+        //Unlock startup thrust protection
+        sendPacket(new CommanderPacket(0, 0, 0, (char)0));
+
+        //create new Handler to post delayed work to the main thread
+        final android.os.Handler handler = new Handler();
+
+        /*
+        //DEFINE prop test
+        Runnable runnable = new Runnable() {
+            public void run() {
+                //send low thrust packet to indicate packet transfer success
+                sendPacket(new CommanderPacket(0, 0, 0, (char) 10001));
+
+                //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
+                CrtpPacket testing = wifiDirectDriver.receivePacket(1);
+
+                if (cnt[0]++ < 20) {
+                    handler.post(this);
+                }
+                //otherwise runnable is complete
+            }
+        };
+
+        //RUN prop test
+        handler.post(runnable);*/
+
+
+        while (cnt[0] < 20) {
+            //send low thrust packet to indicate packet transfer success
+            sendPacket(new CommanderPacket(0, 0, 0, (char) 10001));
+
+            //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
+            CrtpPacket testing = wifiDirectDriver.receivePacket(1);
+
+            cnt[0]++;
+        }
+
+
+        //reset counter to 0
+        cnt[0] = 0;
+
+        //DEFINE up sequence
+        Log.i(LOG_TAG, "Lifting");
+
+        /*
+        runnable = new Runnable() {
+            @Override
+            public void run() {
+                //split deltah into 50 and lift one part per packet
+                sendPacket(new ZDistancePacket(0, 0, 0, (float)start_height + (target_height - start_height) * (cnt[0] / 50.0f)));
+
+                //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
+                CrtpPacket testing = wifiDirectDriver.receivePacket(1);
+
+                if (cnt[0]++ < 50) {
+                    handler.postDelayed(this, 0);
+                }
+            }
+        };
+
+        //RUN up sequence
+        handler.post(runnable);*/
+
+        while (cnt[0] < 50) {
+            sendPacket(new HeightHoldPacket(0, 0, 0, (float)start_height + (target_height - start_height) * (cnt[0] / 50.0f)));
+
+            //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
+            CrtpPacket testing = wifiDirectDriver.receivePacket(1);
+
+            cnt[0]++;
+        }
+
+
+        //reset counter to 0
+        cnt[0] = 0;
+
+        /*
+        //DEFINE hover sequence
+        runnable = new Runnable() {
+            //hover for 30
+            @Override
+            public void run() {
+                sendPacket(new ZDistancePacket(0, 0, 0, target_height));
+
+                //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
+                CrtpPacket testing = wifiDirectDriver.receivePacket(1);
+
+                if (cnt[0]++ < 50) {
+                    handler.postDelayed(this, 0);
+                }
+            }
+        };
+
+        //RUN hover sequence
+        handler.post(runnable);*/
+
+        while (cnt[0] < 30) {
+            sendPacket(new HeightHoldPacket(0, 0, 0, target_height));
+
+            //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
+            CrtpPacket testing = wifiDirectDriver.receivePacket(1);
+
+            cnt[0]++;
+        }
+
+        //reset counter to 0
+        cnt[0] = 0;
+
+        //DEFINE down sequence
+
+        /*
+        //down
+        Log.i(LOG_TAG, "Landing");
+        runnable = new Runnable() {
+            @Override
+            public void run() {
+                //split deltah into 50 and lower one part per packet
+                sendPacket(new ZDistancePacket(0, 0, 0, (-target_height + start_height) * (cnt[0] / 50.0f) + target_height));
+
+                //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
+                CrtpPacket testing = wifiDirectDriver.receivePacket(1);
+
+                //for 50 cycles, send another ZDistancePacket, incrementing cnt[0] each time
+                if (cnt[0]++ < 50) {
+                    handler.postDelayed(this, 0);
+                }
+            }
+        };
+
+        //RUN down sequence
+        handler.post(runnable);*/
+
+        while (cnt[0] < 50) {
+            sendPacket(new HeightHoldPacket(0, 0, 0, (-target_height + start_height) * (cnt[0] / 50.0f) + target_height));
+
+            //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
+            CrtpPacket testing = wifiDirectDriver.receivePacket(1);
+
+            cnt[0]++;
+        }
+
+        //stop
+        sendPacket(new CommanderPacket(0, 0, 0, (char)0));
+        //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
+        CrtpPacket testing = wifiDirectDriver.receivePacket(1);
+
+
+        //what we want to do now is hover indefinitely. That means we need to keep streaming height hold pkts with target_height, while
+        //also running a joystick thread but disabling the thrust for the joystick and subbing in the correct thrust...
+        //or rather, we could run a new thread that streams height hold packets and accepts right joystick pad for pitch and roll adjustments
+        startHeightHoldThread();
+
+        //resume streaming packets from joystick
         joystickRunnable.onResume();
     }
 
@@ -365,6 +557,21 @@ public class MainPresenter {
         joystickRunnable.onPause();
 
         //TODO: landing sequence
+
+        joystickRunnable.onResume();
+    }
+
+    public void kill() {
+        //pause the joystick sending thread so that we can safely run the landing sequence (if it's not already paused
+        joystickRunnable.onPause();
+
+        //send stop packets
+        for (int i = 0; i < 100; i++) {
+            sendPacket(new CommanderPacket(0, 0, 0, (char) 0));
+
+            //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
+            CrtpPacket testing = wifiDirectDriver.receivePacket(1);
+        }
 
         joystickRunnable.onResume();
     }
@@ -511,14 +718,14 @@ public class MainPresenter {
         if (mCrazyflie != null && mCrazyflie.getDriver() instanceof RadioDriver && mainActivity.getController() instanceof GamepadController) {
             if (isZrangerAvailable) {
                 heightHold = hover;
-                // reset target height, when hover is deactivated
+                //reset target height, when hover is deactivated
                 if (!hover) {
                     ((GamepadController) mainActivity.getController()).setTargetHeight(AbstractController.INITIAL_TARGET_HEIGHT);
                 }
             }
 
             else {
-//                Log.i(LOG_TAG, "flightmode.althold: getThrust(): " + mController.getThrustAbsolute());
+                //Log.i(LOG_TAG, "flightmode.althold: getThrust(): " + mController.getThrustAbsolute());
                 mCrazyflie.setParamValue("flightmode.althold", hover ? 1 : 0);
             }
         }

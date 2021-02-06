@@ -161,6 +161,7 @@
     <!-- Noah -->
     <string name="launcher_button">Launch</string>
     <string name="lander_button">Land</string>
+    <string name="kill_button">Kill</string>
     <string name="peer_disc_button">Discover Wifi peers</string>
     <string name="rqst_conn_button">Rqst conn to onboard phone</string>
 
