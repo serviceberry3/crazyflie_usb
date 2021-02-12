@@ -383,63 +383,6 @@ public class WifiDirect extends CrtpDriver {
     //END MAND METHODS FROM CRTPDRIVER..........................................................................................................................................
 
 
-    /*
-    public List<ConnectionData> scanInterface() {
-
-        return scanInterface(mCradio, mUsbInterface);
-    }
-
-    //scan interface for crazyflies
-    private static List<ConnectionData> scanInterface(Crazyradio crazyRadio, CrazyUsbInterface crazyUsbInterface) {
-        List<ConnectionData> connectionDataList = new ArrayList<ConnectionData>();
-
-        if(crazyRadio == null) {
-            crazyRadio = new Crazyradio(crazyUsbInterface);
-        } else {
-            mLogger.error("Cannot scan for links while the link is open!");
-            //TODO: throw exception?
-        }
-
-        mLogger.info("Found Crazyradio with version " + crazyRadio.getVersion() + " and serial number " + crazyRadio.getSerialNumber());
-
-        crazyRadio.setArc(1);
-
-//        crazyRadio.setDataRate(CrazyradioLink.DR_250KPS);
-//        List<Integer> scanRadioChannels250k = crazyRadio.scanChannels();
-//        for(Integer channel : scanRadioChannels250k) {
-//            connectionDataList.add(new ConnectionData(channel, CrazyradioLink.DR_250KPS));
-//        }
-//        crazyRadio.setDataRate(CrazyradioLink.DR_1MPS);
-//        List<Integer> scanRadioChannels1m = crazyRadio.scanChannels();
-//        for(Integer channel : scanRadioChannels1m) {
-//            connectionDataList.add(new ConnectionData(channel, CrazyradioLink.DR_1MPS));
-//        }
-//        crazyRadio.setDataRate(CrazyradioLink.DR_2MPS);
-//        List<Integer> scanRadioChannels2m = crazyRadio.scanChannels();
-//        for(Integer channel : scanRadioChannels2m) {
-//            connectionDataList.add(new ConnectionData(channel, CrazyradioLink.DR_2MPS));
-//        }
-
-        try {
-            connectionDataList = Arrays.asList(crazyRadio.scanChannels());
-        } catch (IOException e) {
-            mLogger.error(e.getMessage());
-        }
-
-//        crazyRadio.close();
-//        crazyRadio = null;
-
-        return connectionDataList;
-    }
-
-    public boolean scanSelected(ConnectionData connectionData, byte[] packet) {
-        if (mCradio == null) {
-            mCradio = new Crazyradio(mUsbInterface);
-        }
-        return mCradio.scanSelected(connectionData.getChannel(), connectionData.getDataRate(), packet);
-    }*/
-
-
     //instantiate and start a new Thread that receives and sends packets
     private void startSendReceiveThread() {
         //Log.i(TAG, "startSendReceiveThread");
@@ -494,7 +437,7 @@ public class WifiDirect extends CrtpDriver {
          */
         public void run() {
             //set dataOut byte array to null packet to start, which is just 0xff
-            byte[] dataOut = Crazyradio.NULL_PACKET;
+            byte[] dataOut = Crazyradio.NULL_PACKET; //equal to one 0xff byte
 
             double waitTime = 0;
             int emptyCtr = 0;
@@ -600,6 +543,7 @@ public class WifiDirect extends CrtpDriver {
 
                     //SKIP: create fake incoming packet
 
+                    //create incoming packet to store ack
                     CrtpPacket inPacket = new CrtpPacket(new byte[1]);
                     mInQueue.put(inPacket);
 
@@ -607,11 +551,11 @@ public class WifiDirect extends CrtpDriver {
                     CrtpPacket outPacket = mOutQueue.poll((long) waitTime, TimeUnit.SECONDS); //retrieves and removes head of FIFO queue, or returns NULL if time runs out b4 an item is avail
                     //waiting up to the specified wait time if necessary for an element to become available
 
-                    //if we got something from the queue
+                    //if we got something from the queue to send
                     if (outPacket != null) {
                         //Log.i(TAG, "sendReceiveThread: got joystick control pkt from queue, converting to bytearray for sending");
 
-                        //convert the CRTP packet to array of bytes for proper transmission
+                        //convert the CRTP packet to array of bytes for proper transmission. Should be a 15-byte array for CommanderPkt, 17-byte array for HeightHoldPkt
                         dataOut = outPacket.toByteArray();
                     }
 
@@ -634,75 +578,67 @@ public class WifiDirect extends CrtpDriver {
         }
     }
 
-    int counter = 0;
-
     /**
-     * Send a packet and receive the ACKNOWLEDGEMENT signal from the radio dongle (back from the drone).
+     * Send a packet and receive the ACKNOWLEDGEMENT signal from the onboard phone (back from drone).
      * The ack contains information about the packet transmission
-     * and a data payload if the ack packet contained any
+     * and a data payload if the ack packet contained any. Right now I'm just using a dummy ack, 0x09.
      *
      * @param dataOut bytes to send
      */
-    public RadioAck sendPacketHelper(final byte[] dataOut, OutputStream outStream, InputStream inStream) { //was sendPacket
+    public RadioAck sendPacketHelper(final byte[] dataOut, OutputStream outStream, InputStream inStream) { //was sendPacket()
         RadioAck ackIn = null;
 
-        byte[] dataIn = new byte[17]; // 33?
+        //create array of bytes to hold incoming data
+        byte[] dataIn = new byte[25]; // 33?
 
-        if (dataOut!=null && dataOut.length >= 17) {
+        Log.i(TAG, "dataOut length is " + dataOut.length);
+
+        //print out pkts
+        if (dataOut != null && dataOut.length == 15) {
 
             //if (counter == 3) {
                 //Log.i(TAG, String.format("Sending packet of length %d to drone", dataOut.length));
                 Log.i(TAG, String.format("Controller sending packet 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X " +
-                                "0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X",
+                                "0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X ",
                         //"0x%02X 0x%02X 0x%02X 0x%02X " +
                         //"0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X " +
                         //"0x%02X 0x%02X 0x%02X 0x%02X to drone",
                         dataOut[0], dataOut[1], dataOut[2], dataOut[3], dataOut[4],
                         dataOut[5], dataOut[6], dataOut[7], dataOut[8], dataOut[9], dataOut[10], dataOut[11], dataOut[12],
-                        dataOut[13], dataOut[14], dataOut[15], dataOut[16]));
-            /*
+                        dataOut[13], dataOut[14]/*, dataOut[15], dataOut[16]*/));
+
+
+                    /*
                     dataOut[15], dataOut[16], dataOut[17], dataOut[18], dataOut[19], dataOut[20],
                     dataOut[21], dataOut[22], dataOut[23], dataOut[24], dataOut[25], dataOut[26], dataOut[27], dataOut[28],
                     dataOut[29], dataOut[30], dataOut[31], dataOut[32]));*/
+        }
+        else if (dataOut != null && dataOut.length == 17) {
 
-            /*
-            mContext.runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    ((TextView)mContext.findViewById(R.id.linkQuality_text)).setText(String.format("0x%02X 0x%02X", dataOut[15], dataOut[16]));
-                }
-            });
+            //if (counter == 3) {
+            //Log.i(TAG, String.format("Sending packet of length %d to drone", dataOut.length));
+            Log.i(TAG, String.format("Controller sending packet 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X " +
+                            "0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X",
+                    //"0x%02X 0x%02X 0x%02X 0x%02X " +
+                    //"0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X " +
+                    //"0x%02X 0x%02X 0x%02X 0x%02X to drone",
+                    dataOut[0], dataOut[1], dataOut[2], dataOut[3], dataOut[4],
+                    dataOut[5], dataOut[6], dataOut[7], dataOut[8], dataOut[9], dataOut[10], dataOut[11], dataOut[12],
+                    dataOut[13], dataOut[14], dataOut[15], dataOut[16]));
 
 
-                mContext.appendToConsole(String.format("Controller sending packet 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X " +
-                                "0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X",
-                        //"0x%02X 0x%02X 0x%02X 0x%02X " +
-                        //"0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X " +
-                        //"0x%02X 0x%02X 0x%02X 0x%02X to drone",
-                        dataOut[0], dataOut[1], dataOut[2], dataOut[3], dataOut[4],
-                        dataOut[5], dataOut[6], dataOut[7], dataOut[8], dataOut[9], dataOut[10], dataOut[11], dataOut[12],
-                        dataOut[13], dataOut[14], dataOut[15], dataOut[16]));*/
-
-                counter = -1;
-            //}
+                    /*
+                    dataOut[15], dataOut[16], dataOut[17], dataOut[18], dataOut[19], dataOut[20],
+                    dataOut[21], dataOut[22], dataOut[23], dataOut[24], dataOut[25], dataOut[26], dataOut[27], dataOut[28],
+                    dataOut[29], dataOut[30], dataOut[31], dataOut[32]));*/
         }
 
-        counter++;
 
-
-        /*
-        if (dataOut!=null && dataOut.length >=2) {
-            Log.i(TAG, String.format("Controller sending packet 0x%02X 0x%02X", dataOut[0], dataOut[1]));
-        }*/
-
-        //Log.i(TAG, String.format("Length is %d", dataOut.length));
 
         /*pseudo: send packet via the server/client socket
         We're the server, so we need to write a packet. Then we need to block waiting for the returned response
         */
         asServerSendDataAndWaitForResponse(dataOut, dataIn, outStream, inStream);
-
-        //mUsbInterface.sendBulkTransfer(dataOut, data); //TODO: change to send the transfer over WIFI DIRECT SOCKET
 
 
         return null;
@@ -736,8 +672,6 @@ public class WifiDirect extends CrtpDriver {
 
     //send a packet to onboard Pixel (on the drone) via WifiDirect and wait for ACK
     public void asServerSendDataAndWaitForResponse(byte[] out, byte[] in, OutputStream outStream, InputStream inStream) {
-        //Log.i(TAG, "SendDataAndWait running...");
-
         try {
             outStream.write(out);
         }

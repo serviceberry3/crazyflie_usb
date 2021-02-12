@@ -245,10 +245,9 @@ public class CrtpPacket {
     public byte[] toByteArray() {
         //if it's the first call, serialize the packet and cache it
         if (mSerializedPacket == null) {
-            //Log.i("CRTPPACKET", String.format("Allocating %d in buffer", getDataByteCount() + 1));
+            //allocate bytebuffer big enough for the data plus one for the header byte
+            //will be 15 for CommanderPkt, 17 for HeightHoldPkt
             ByteBuffer buffer = ByteBuffer.allocate(getDataByteCount() + 1).order(BYTE_ORDER);
-
-            //ByteBuffer buffer = ByteBuffer.allocate(17).order(BYTE_ORDER);
 
             //fake radio headers
             //buffer.put((byte)0xBC);
@@ -257,12 +256,10 @@ public class CrtpPacket {
             //put the informational byte that specifies port and channel
             buffer.put(getHeaderByte());
 
-            //puts the packet payload
+            //puts the packet payload (the "data" section)
             serializeData(buffer);
 
             mSerializedPacket = buffer.array();
-
-            //Log.i("CRTPPACKET", String.format("length of mSerializedPacket is %d", mSerializedPacket.length));
         }
         return mSerializedPacket;
     }

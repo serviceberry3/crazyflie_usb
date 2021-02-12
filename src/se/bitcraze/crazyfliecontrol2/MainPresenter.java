@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.sql.Time;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.LogRecord;
 
 import se.bitcraze.crazyflie.lib.crazyflie.ConnectionAdapter;
@@ -71,6 +72,10 @@ public class MainPresenter {
     private ConsoleListener mConsoleListener;
 
     private SendJoystickDataRunnable joystickRunnable;
+
+    private volatile boolean kill = false;
+    private Thread mLaunchingThread;
+    private AtomicBoolean launching = new AtomicBoolean(false);
 
     //constructor
     public MainPresenter(MainActivity mainActivity) {
@@ -324,8 +329,6 @@ public class MainPresenter {
                         }
                     }
                 }
-
-
             }
         }
 
@@ -369,187 +372,260 @@ public class MainPresenter {
 
     }
 
-    public void launch() {
-        //pause the joystick sending thread so that we can safely run the launch sequence
-        joystickRunnable.onPause();
+    //Runnable that sends data from joysticks to the drone containing user input
+    class LaunchRunnable implements Runnable {
+        private final Object mPauseLock;
+        private boolean mPaused;
+        private boolean mFinished;
 
-        //TODO: launch sequence
-        Log.i(LOG_TAG, "Launching...");
+        public LaunchRunnable() {
+            mPauseLock = new Object();
+            mPaused = false;
+            mFinished = false;
+        }
 
-        final int[] cnt = {0};
-        int thrust_mult = 1;
-        int thrust_step = 100;
-        int thrust_dstep = 10;
-        int thrust = 3000;
-        int pitch = 0;
-        int roll = 0;
-        int yawrate = 0;
-        final float start_height = 0.05f;
+        public void run() {
+            //pause the joystick sending thread so that we can safely run the launch sequence
+            joystickRunnable.onPause();
 
-        //the distance is not accurate, 1.2 => 1.5m
-        final float target_height = 0.3f;
+            //TODO: launch sequence
+            Log.i(LOG_TAG, "Launching...");
 
-        /*
-        //get Python interpreter
-        Python python = Python.getInstance();
-        PyObject pythonFile = python.getModule("cf-python-lib/examples/flytest.py");
-        pythonFile.call();*/
+            final int[] cnt = {0};
+            int thrust_mult = 1;
+            int thrust_step = 100;
+            int thrust_dstep = 10;
+            int thrust = 3000;
+            int pitch = 0;
+            int roll = 0;
+            int yawrate = 0;
+            final float start_height = 0.05f;
+
+            //the distance is not accurate, 1.2 => 1.5m
+            final float target_height = 0.3f;
+
+            Runnable runnable;
+
+            /*
+            //get Python interpreter
+            Python python = Python.getInstance();
+            PyObject pythonFile = python.getModule("cf-python-lib/examples/flytest.py");
+            pythonFile.call();*/
+
+            //Unlock startup thrust protection
+            sendPacket(new CommanderPacket(0, 0, 0, (char)0));
+
+            //create new Handler to post delayed work to the main thread
+            final android.os.Handler handler = new Handler(Looper.getMainLooper());
+
+            /*
+            //DEFINE prop test
+            runnable = new Runnable() {
+                public void run() {
+                    //send low thrust packet to indicate packet transfer success
+                    sendPacket(new CommanderPacket(0, 0, 0, (char) 10001));
+
+                    //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
+                    CrtpPacket testing = wifiDirectDriver.receivePacket(1);
+
+                    if (cnt[0]++ < 20) {
+                        handler.post(this);
+                    }
+                    //otherwise runnable is complete
+                }
+            };
+
+            //RUN prop test
+            handler.post(runnable);*/
 
 
-        //Unlock startup thrust protection
-        sendPacket(new CommanderPacket(0, 0, 0, (char)0));
-
-        //create new Handler to post delayed work to the main thread
-        final android.os.Handler handler = new Handler();
-
-        /*
-        //DEFINE prop test
-        Runnable runnable = new Runnable() {
-            public void run() {
+            /*
+            while (cnt[0] < 20) {
                 //send low thrust packet to indicate packet transfer success
                 sendPacket(new CommanderPacket(0, 0, 0, (char) 10001));
 
                 //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
                 CrtpPacket testing = wifiDirectDriver.receivePacket(1);
 
-                if (cnt[0]++ < 20) {
-                    handler.post(this);
-                }
-                //otherwise runnable is complete
-            }
-        };
-
-        //RUN prop test
-        handler.post(runnable);*/
+                cnt[0]++;
+            }*/
 
 
-        while (cnt[0] < 20) {
-            //send low thrust packet to indicate packet transfer success
-            sendPacket(new CommanderPacket(0, 0, 0, (char) 10001));
+            //reset counter to 0
+            cnt[0] = 0;
 
-            //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
-            CrtpPacket testing = wifiDirectDriver.receivePacket(1);
+            //DEFINE up sequence
+            Log.i(LOG_TAG, "Lifting");
 
-            cnt[0]++;
-        }
-
-
-        //reset counter to 0
-        cnt[0] = 0;
-
-        //DEFINE up sequence
-        Log.i(LOG_TAG, "Lifting");
-
-        /*
-        runnable = new Runnable() {
-            @Override
-            public void run() {
-                //split deltah into 50 and lift one part per packet
-                sendPacket(new ZDistancePacket(0, 0, 0, (float)start_height + (target_height - start_height) * (cnt[0] / 50.0f)));
+            /*
+            while (cnt[0] < 10) {
+                sendPacket(new HeightHoldPacket(0, 0, 0, start_height));
 
                 //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
                 CrtpPacket testing = wifiDirectDriver.receivePacket(1);
 
-                if (cnt[0]++ < 50) {
-                    handler.postDelayed(this, 0);
+                cnt[0]++;
+            }*/
+
+            runnable = new Runnable() {
+                @Override
+                public void run() {
+                    //split deltah into 50 and lift one part per packet
+                    sendPacket(new HeightHoldPacket(0, 0, 0, (float)start_height + (target_height - start_height) * (cnt[0] / 50.0f)));
+
+                    //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
+                    CrtpPacket testing = wifiDirectDriver.receivePacket(1);
+
+                    if (killCheck())
+                        return;
+
+                    if (cnt[0]++ < 50) {
+                        handler.postDelayed(this, 50);
+                    }
                 }
-            }
-        };
+            };
 
-        //RUN up sequence
-        handler.post(runnable);*/
+            //RUN up sequence
+            handler.post(runnable);
 
-        while (cnt[0] < 50) {
-            sendPacket(new HeightHoldPacket(0, 0, 0, (float)start_height + (target_height - start_height) * (cnt[0] / 50.0f)));
-
-            //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
-            CrtpPacket testing = wifiDirectDriver.receivePacket(1);
-
-            cnt[0]++;
-        }
-
-
-        //reset counter to 0
-        cnt[0] = 0;
-
-        /*
-        //DEFINE hover sequence
-        runnable = new Runnable() {
-            //hover for 30
-            @Override
-            public void run() {
-                sendPacket(new ZDistancePacket(0, 0, 0, target_height));
+            /*
+            while (cnt[0] < 50) {
+                sendPacket(new HeightHoldPacket(0, 0, 0, (float)start_height + (target_height - start_height) * (cnt[0] / 50.0f)));
 
                 //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
                 CrtpPacket testing = wifiDirectDriver.receivePacket(1);
 
-                if (cnt[0]++ < 50) {
-                    handler.postDelayed(this, 0);
+                if (killCheck()) {
+                    return;
                 }
-            }
-        };
 
-        //RUN hover sequence
-        handler.post(runnable);*/
+                cnt[0]++;
+            }*/
 
-        while (cnt[0] < 30) {
-            sendPacket(new HeightHoldPacket(0, 0, 0, target_height));
+            //reset counter to 0
+            cnt[0] = 0;
 
-            //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
-            CrtpPacket testing = wifiDirectDriver.receivePacket(1);
+            //DEFINE hover sequence
+            runnable = new Runnable() {
+                //hover for 30
+                @Override
+                public void run() {
+                    sendPacket(new HeightHoldPacket(0, 0, 0, target_height));
 
-            cnt[0]++;
-        }
+                    //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
+                    CrtpPacket testing = wifiDirectDriver.receivePacket(1);
 
-        //reset counter to 0
-        cnt[0] = 0;
+                    if (killCheck())
+                        return;
 
-        //DEFINE down sequence
+                    if (cnt[0]++ < 50) {
+                        handler.postDelayed(this, 100);
+                    }
+                }
+            };
 
-        /*
-        //down
-        Log.i(LOG_TAG, "Landing");
-        runnable = new Runnable() {
-            @Override
-            public void run() {
-                //split deltah into 50 and lower one part per packet
-                sendPacket(new ZDistancePacket(0, 0, 0, (-target_height + start_height) * (cnt[0] / 50.0f) + target_height));
+            //RUN hover sequence
+            handler.post(runnable);
+
+            /*
+            while (cnt[0] < 30) {
+                sendPacket(new HeightHoldPacket(0, 0, 0, target_height));
 
                 //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
                 CrtpPacket testing = wifiDirectDriver.receivePacket(1);
 
-                //for 50 cycles, send another ZDistancePacket, incrementing cnt[0] each time
-                if (cnt[0]++ < 50) {
-                    handler.postDelayed(this, 0);
+                if (killCheck()) {
+                    return;
                 }
-            }
-        };
 
-        //RUN down sequence
-        handler.post(runnable);*/
+                cnt[0]++;
+            }*/
 
-        while (cnt[0] < 50) {
-            sendPacket(new HeightHoldPacket(0, 0, 0, (-target_height + start_height) * (cnt[0] / 50.0f) + target_height));
+            //reset counter to 0
+            cnt[0] = 0;
 
+            //DEFINE down sequence
+
+
+            //down
+            Log.i(LOG_TAG, "Landing");
+            runnable = new Runnable() {
+                @Override
+                public void run() {
+                    //split deltah into 50 and lower one part per packet
+                    sendPacket(new HeightHoldPacket(0, 0, 0, (-target_height + start_height) * (cnt[0] / 50.0f) + target_height));
+
+                    //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
+                    CrtpPacket testing = wifiDirectDriver.receivePacket(1);
+
+                    if (killCheck())
+                        return;
+
+                    //for 50 cycles, send another ZDistancePacket, incrementing cnt[0] each time
+                    if (cnt[0]++ < 50) {
+                        handler.postDelayed(this, 50);
+                    }
+                }
+            };
+
+            //RUN down sequence
+            handler.post(runnable);
+
+            /*
+            while (cnt[0] < 50) {
+                sendPacket(new HeightHoldPacket(0, 0, 0, (-target_height + start_height) * (cnt[0] / 50.0f) + target_height));
+
+                //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
+                CrtpPacket testing = wifiDirectDriver.receivePacket(1);
+
+                if (killCheck()) {
+                    return;
+                }
+
+                cnt[0]++;
+            }*/
+
+            //stop
+            sendPacket(new CommanderPacket(0, 0, 0, (char)0));
             //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
             CrtpPacket testing = wifiDirectDriver.receivePacket(1);
 
-            cnt[0]++;
+
+            //what we want to do now is hover indefinitely. That means we need to keep streaming height hold pkts with target_height, while
+            //also running a joystick thread but disabling the thrust for the joystick and subbing in the correct thrust...
+            //or rather, we could run a new thread that streams height hold packets and accepts right joystick pad for pitch and roll adjustments
+            startHeightHoldThread();
+
+            //resume streaming packets from joystick
+            joystickRunnable.onResume();
+
+            //set launching to false
+            launching.set(false);
         }
 
-        //stop
-        sendPacket(new CommanderPacket(0, 0, 0, (char)0));
-        //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
-        CrtpPacket testing = wifiDirectDriver.receivePacket(1);
+        //pause the thread to stop streaming joystick data to onboard phone so that we can run a navigation sequence, etc.
+        public void onPause() {
+            synchronized (mPauseLock) {
+                mainActivity.showToastie("Joystick stream stopped");
+                mPaused = true;
+            }
+        }
 
+        //resume the thread
+        public void onResume() {
+            //get lock on the pauser object, set paused to false, and notify mPauseLock object
+            synchronized (mPauseLock) {
+                mPaused = false;
+                //wake up all threads that are waiting on this object's monitor
+                mPauseLock.notifyAll();
+            }
+        }
+    }
 
-        //what we want to do now is hover indefinitely. That means we need to keep streaming height hold pkts with target_height, while
-        //also running a joystick thread but disabling the thrust for the joystick and subbing in the correct thrust...
-        //or rather, we could run a new thread that streams height hold packets and accepts right joystick pad for pitch and roll adjustments
-        startHeightHoldThread();
-
-        //resume streaming packets from joystick
-        joystickRunnable.onResume();
+    public void launch() {
+        launching.set(true);
+        mLaunchingThread = new Thread(new LaunchRunnable());
+        mLaunchingThread.start();
     }
 
     public void land() {
@@ -561,19 +637,38 @@ public class MainPresenter {
         joystickRunnable.onResume();
     }
 
+    //request a kill. Called on pressing "kill" button
     public void kill() {
-        //pause the joystick sending thread so that we can safely run the landing sequence (if it's not already paused
-        joystickRunnable.onPause();
+        Log.i(LOG_TAG, "Kill requested");
+        kill = true;
 
-        //send stop packets
-        for (int i = 0; i < 100; i++) {
-            sendPacket(new CommanderPacket(0, 0, 0, (char) 0));
+        //if launching, interrupt the launching thread
+        if (launching.get())
+            mLaunchingThread.interrupt();
+    }
 
-            //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
-            CrtpPacket testing = wifiDirectDriver.receivePacket(1);
+    //check if user has requested kill. If so, kill the drone
+    public boolean killCheck() {
+        if (kill) {
+            //pause the joystick sending thread so that we can safely run the landing sequence (if it's not already paused
+            joystickRunnable.onPause();
+
+            //send 10 STOP packets
+            for (int i = 0; i < 10; i++) {
+                sendPacket(new CommanderPacket(0, 0, 0, (char) 0));
+
+                //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
+                CrtpPacket testing = wifiDirectDriver.receivePacket(1);
+            }
+
+            joystickRunnable.onResume();
+
+            kill = false;
+
+            return true;
         }
 
-        joystickRunnable.onResume();
+        return false;
     }
 
     public void connectWifiDirect() {

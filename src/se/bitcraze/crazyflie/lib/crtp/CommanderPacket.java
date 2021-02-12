@@ -81,8 +81,6 @@ public class CommanderPacket extends CrtpPacket {
         this(roll, pitch, yaw, thrust, false);
     }
 
-
-
     @Override
     protected void serializeData(ByteBuffer buffer) {
         buffer.putFloat(mRoll);
@@ -93,7 +91,7 @@ public class CommanderPacket extends CrtpPacket {
 
     @Override
     public int getDataByteCount() {
-        return (3 * 4) + (1 * 2) + (1 * 2); // 3 floats with size 4, 1 char (= uint16_t) with size 2, +2 for fake radio header
+        return (3 * 4) + (1 * 2); // 3 floats with size 4, 1 char (= uint16_t) with size 2
     }
 
     @Override
