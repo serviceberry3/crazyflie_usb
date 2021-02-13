@@ -94,7 +94,7 @@ public abstract class CrtpDriver {
     /**
      * Notify all registered listeners about a requested connection
      */
-    protected void notifyConnectionRequested(){
+    protected void notifyConnectionRequested() {
         for (ConnectionListener cl : this.mConnectionListeners) {
             cl.connectionRequested();
         }
@@ -103,7 +103,7 @@ public abstract class CrtpDriver {
     /**
      * Notify all registered listeners about a connect.
      */
-    public void notifyConnected(){
+    public void notifyConnected() {
         for (ConnectionListener cl : this.mConnectionListeners) {
             cl.connected();
         }

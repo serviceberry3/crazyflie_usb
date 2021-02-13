@@ -1,14 +1,10 @@
 package se.bitcraze.crazyfliecontrol.controller;
 
 import android.Manifest;
-import android.bluetooth.BluetoothGattCharacteristic;
-import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
-import android.graphics.ImageDecoder;
 import android.net.NetworkInfo;
 import android.net.wifi.p2p.WifiP2pConfig;
 import android.net.wifi.p2p.WifiP2pDevice;
@@ -16,13 +12,9 @@ import android.net.wifi.p2p.WifiP2pDeviceList;
 import android.net.wifi.p2p.WifiP2pInfo;
 import android.net.wifi.p2p.WifiP2pManager;
 import android.os.AsyncTask;
-import android.os.Bundle;
 import android.os.Handler;
 import android.support.v4.app.ActivityCompat;
 import android.util.Log;
-import android.view.View;
-import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.ListView;
 import android.widget.TextView;
@@ -40,34 +32,28 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
-import se.bitcraze.crazyflie.lib.Utilities;
-import se.bitcraze.crazyflie.lib.crazyradio.ConnectionData;
 import se.bitcraze.crazyflie.lib.crazyradio.Crazyradio;
 import se.bitcraze.crazyflie.lib.crazyradio.RadioAck;
-import se.bitcraze.crazyflie.lib.crazyradio.RadioDriver;
-import se.bitcraze.crazyflie.lib.crtp.CommanderPacket;
 import se.bitcraze.crazyflie.lib.crtp.CrtpDriver;
 import se.bitcraze.crazyflie.lib.crtp.CrtpPacket;
-import se.bitcraze.crazyflie.lib.usb.CrazyUsbInterface;
-import se.bitcraze.crazyfliecontrol.ble.BleLink;
 import se.bitcraze.crazyfliecontrol2.MainActivity;
-import se.bitcraze.crazyfliecontrol2.R;
 
 public class WifiDirect extends CrtpDriver {
 
-    private Thread mRadioDriverThread;
+    private Thread mWifiDriverThread;
 
     private final Logger mLogger = LoggerFactory.getLogger("WifiDirectLogger");
 
     private static final String TAG = "WifiDirect";
     private MainActivity mContext;
+
+    private WifiDriverThread mWifiDriverRunnable;
 
     private ListView listView;
     private TextView tv;
@@ -343,21 +329,13 @@ public class WifiDirect extends CrtpDriver {
     @Override
     public void sendPacket(CrtpPacket packet) {
         //TODO: does it make sense to be able to queue packets even though the connection is not established yet?
-
-        /*
-        try:
-            self.out_queue.put(pk, True, 2)
-        except Queue.Full:
-            if self.link_error_callback:
-                self.link_error_callback("RadioDriver: Could not send packet to copter")
-        */
-
         //this.mOutQueue.addLast(packet);
 
         //add the passed packet to the out FIFO queue
         try {
-            //Log.i(TAG, "WifiDirect putting control packet on the queue from joystick");
+            Log.i(TAG, "WifiDirect putting control packet on the queue, size of queue before is " + mOutQueue.size());
             mOutQueue.put(packet);
+            Log.i(TAG, "WifiDirect finished queue packet put, size of queue now " + mOutQueue.size());
         }
 
         catch (InterruptedException e) {
@@ -385,32 +363,37 @@ public class WifiDirect extends CrtpDriver {
 
     //instantiate and start a new Thread that receives and sends packets
     private void startSendReceiveThread() {
-        //Log.i(TAG, "startSendReceiveThread");
-        if (mRadioDriverThread == null) {
-            //self._thread = _RadioDriverThread(self.cradio, self.in_queue, self.out_queue, link_quality_callback, link_error_callback)
-            WifiDirect.RadioDriverThread rDT = new WifiDirect.RadioDriverThread(serverTask);
+        if (mWifiDriverThread == null) {
+            mWifiDriverRunnable = new WifiDriverThread(serverTask);
 
             //run on separate (non-UI) thread to avoid blocking UI
-            mRadioDriverThread = new Thread(rDT);
-            mRadioDriverThread.start();
+            mWifiDriverThread = new Thread(mWifiDriverRunnable);
+            mWifiDriverThread.start();
         }
     }
 
     //stop the sender/receiver Thread by calling interrupt() to end the loop
     private void stopSendReceiveThread() {
-        if (this.mRadioDriverThread != null) {
-            this.mRadioDriverThread.interrupt();
+        if (this.mWifiDriverThread != null) {
+            this.mWifiDriverThread.interrupt();
 
             //set the Thread to null
-            this.mRadioDriverThread = null;
+            this.mWifiDriverThread = null;
         }
     }
 
+    public void pauseWifiDriverThread() {
+        mWifiDriverRunnable.onPause();
+    }
+
+    public void resumeWifiDriverThread() {
+        mWifiDriverRunnable.onResume();
+    }
 
     /**
-     * Radio link receiver thread is used to read data from the Crazyradio USB driver.
+     * Wifi link receiver thread is used to send and receive data from the onboard Pixel, interacting with the LinkedBlockingQueues.
      */
-    private class RadioDriverThread implements Runnable {
+    private class WifiDriverThread implements Runnable {
 
         final Logger mLogger = LoggerFactory.getLogger(this.getClass().getSimpleName());
 
@@ -419,14 +402,21 @@ public class WifiDirect extends CrtpDriver {
         private int mRetryBeforeDisconnect;
         private final OutputStream outputStream;
         private final InputStream inputStream;
+        private final Object mPauseLock;
+        private boolean mPaused;
+        private boolean mFinished;
 
         /**
          * Create the object
          */
-        public RadioDriverThread(FileServerAsyncTask serverTask) {
+        public WifiDriverThread(FileServerAsyncTask serverTask) {
             this.outputStream = serverTask.getOutStream();
             this.inputStream = serverTask.getInStream();
             this.mRetryBeforeDisconnect = RETRYCOUNT_BEFORE_DISCONNECT;
+
+            mPauseLock = new Object();
+            mPaused = false;
+            mFinished = false;
         }
 
         /**
@@ -439,9 +429,9 @@ public class WifiDirect extends CrtpDriver {
             //set dataOut byte array to null packet to start, which is just 0xff
             byte[] dataOut = Crazyradio.NULL_PACKET; //equal to one 0xff byte
 
-            double waitTime = 0;
+            //wait up to 100 ms for an mOutQueue item to become available, since we often sleep while running automated flight scripts
+            double waitTime = 100;
             int emptyCtr = 0;
-
 
             //as long as the Thread isn't interrupted. (Basically runs infinitely)
             while (!Thread.currentThread().isInterrupted()) {
@@ -458,6 +448,8 @@ public class WifiDirect extends CrtpDriver {
                                                  "Exception:%s\n\n%s" % (e,
                                                  traceback.format_exc()))
                     */
+
+                    Log.i(TAG, "WifiDirect: WifiDriverThread calling sendPacketHelper()");
 
                     //***********************************************************************************************************************************
                     //send next packet to the drone, blocking until get response
@@ -498,7 +490,6 @@ public class WifiDirect extends CrtpDriver {
 
 
                         }
-
                         //continue;
                     }
                     //if we made it here, ackStatus.isAck() was true, so copter in range
@@ -522,7 +513,6 @@ public class WifiDirect extends CrtpDriver {
                         waitTime = 0;
                         emptyCtr = 0;
                     }
-
 
                     //otherwise we got an empty payload in the ack
                     else {
@@ -548,7 +538,7 @@ public class WifiDirect extends CrtpDriver {
                     mInQueue.put(inPacket);
 
                     //get the next packet to send after relaxation (wait 10ms)
-                    CrtpPacket outPacket = mOutQueue.poll((long) waitTime, TimeUnit.SECONDS); //retrieves and removes head of FIFO queue, or returns NULL if time runs out b4 an item is avail
+                    CrtpPacket outPacket = mOutQueue.poll((long) waitTime, TimeUnit.MILLISECONDS); //retrieves and removes head of FIFO queue, or returns NULL if time runs out b4 an item is avail
                     //waiting up to the specified wait time if necessary for an element to become available
 
                     //if we got something from the queue to send
@@ -561,19 +551,56 @@ public class WifiDirect extends CrtpDriver {
 
                     //otherwise set out to 0xff again
                     else {
+                        Log.i(TAG, "WifiDirect: setting dataOut to NULL_PACKET");
                         //prepare a NULL packet to send to the copter
                         dataOut = Crazyradio.NULL_PACKET;
                     }
-                    //Thread.sleep(10);
+
+                    //check to see if a pause was requested from the MainPresenter
+
+                    //get the lock on the pauser object
+                    synchronized (mPauseLock) {
+                        //Log.i(LOG_TAG, "Testing joystick stopper");
+
+                        //check to see if a pause was indeed requested. If so, wait until notify from onResume()
+                        while (mPaused) {
+                            try {
+                                //causes current thread to wait until another thread invokes notify() or notifyAll() for this obj
+                                mPauseLock.wait();
+                            }
+                            catch (InterruptedException e) {
+                            }
+                        }
+                    }
                 }
 
 
                 //if we called to stop the Thread
                 catch (InterruptedException e) {
-                    mLogger.debug("RadioDriverThread was interrupted.");
+                    mLogger.debug("WifiDriverThread was interrupted.");
                     notifyLinkQualityUpdated(0);
                     break;
                 }
+            }
+        }
+
+        //pause the thread to stop streaming packets from queue (in this case, probably NULL packets) to onboard phone so that we can run a navigation sequence, etc.
+        public void onPause() {
+            synchronized (mPauseLock) {
+                Log.i(TAG, "Pausing WifiDriverThread runnable!");
+                mContext.showToastie("Joystick stream stopped");
+                mPaused = true;
+            }
+        }
+
+        //resume the thread
+        public void onResume() {
+            //get lock on the pauser object, set paused to false, and notify mPauseLock object
+            synchronized (mPauseLock) {
+                Log.i(TAG, "Resuming WifiDriverThread runnable!");
+                mPaused = false;
+                //wake up all threads that are waiting on this object's monitor
+                mPauseLock.notifyAll();
             }
         }
     }
@@ -591,7 +618,10 @@ public class WifiDirect extends CrtpDriver {
         //create array of bytes to hold incoming data
         byte[] dataIn = new byte[25]; // 33?
 
+
         Log.i(TAG, "dataOut length is " + dataOut.length);
+        Log.i(TAG, "mInQueue num elements is " + mInQueue.size());
+        Log.i(TAG, "mOutQueue num elements is " + mOutQueue.size());
 
         //print out pkts
         if (dataOut != null && dataOut.length == 15) {

@@ -232,6 +232,7 @@ public class MainPresenter {
     }
 
     private void sendPacket(CrtpPacket packet) {
+        Log.i(LOG_TAG, "sendPacket called in mPresenter!");
         if (mCrazyflie != null) {
             mCrazyflie.sendPacket(packet);
         }
@@ -336,6 +337,7 @@ public class MainPresenter {
         //pause the thread to stop streaming joystick data to onboard phone so that we can run a navigation sequence, etc.
         public void onPause() {
             synchronized (mPauseLock) {
+                Log.i(LOG_TAG, "Pausing joystick runnable!");
                 mainActivity.showToastie("Joystick stream stopped");
                 mPaused = true;
             }
@@ -345,6 +347,7 @@ public class MainPresenter {
         public void onResume() {
             //get lock on the pauser object, set paused to false, and notify mPauseLock object
             synchronized (mPauseLock) {
+                Log.i(LOG_TAG, "Resuming joystick runnable!");
                 mPaused = false;
                 //wake up all threads that are waiting on this object's monitor
                 mPauseLock.notifyAll();
@@ -385,12 +388,17 @@ public class MainPresenter {
             mFinished = false;
         }
 
+        /*Launch the drone up to a certain height and hover there.
+        * Since we stop the joystick streaming thread while we run the launch sequence, mOutQueue in the driver gets cleaned out (we sleep between
+        * sending packets during this sequence). That means the WifiDriverThread will continue to send NULL packets to the onboard phone during sleep time,
+        * because it tries to poll the out queue and comes up empty. We need to make sure the LinkedBlockingQueue poll() waitTime is long enough.
+        * Otherwise WifiDriverThread will flood the queue.
+        * */
         public void run() {
             try {
                 //pause the joystick sending thread so that we can safely run the launch sequence
                 joystickRunnable.onPause();
 
-                //TODO: launch sequence
                 Log.i(LOG_TAG, "Launching...");
 
                 final int[] cnt = {0};
@@ -418,7 +426,7 @@ public class MainPresenter {
                 sendPacket(new CommanderPacket(0, 0, 0, (char) 0));
 
                 //create new Handler to post delayed work to the main thread
-                final android.os.Handler handler = new Handler(Looper.getMainLooper());
+                //final android.os.Handler handler = new Handler(Looper.getMainLooper());
 
                 /*
                 //DEFINE prop test
@@ -440,18 +448,24 @@ public class MainPresenter {
                 //RUN prop test
                 handler.post(runnable);*/
 
-                /*
+
+                /*CORRECT PROP TEST SEQ
                 while (cnt[0] < 100) {
+                    Log.i(LOG_TAG, "Launchrunnable sending pkt...");
                     //send low thrust packet to indicate packet transfer success
                     sendPacket(new CommanderPacket(0, 0, 0, (char) 10001));
 
                     //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
                     CrtpPacket testing = wifiDirectDriver.receivePacket(1);
 
+                    Log.i(LOG_TAG, "Launchrunnable got back ack, starting killcheck...");
+
                     if (killCheck())
                         return;
 
-                    Thread.sleep(5);
+                    Log.i(LOG_TAG, "Launchrunnable Killcheck complete, sleeping..");
+
+                    Thread.sleep(50);
 
                     cnt[0]++;
                 }*/
@@ -496,7 +510,7 @@ public class MainPresenter {
                 handler.post(runnable);*/
 
 
-
+                //CORRECT UP SEQ
                 while (cnt[0] < 50) {
                     sendPacket(new HeightHoldPacket(0, 0, 0, (float)start_height + (target_height - start_height) * (cnt[0] / 50.0f)));
 
@@ -539,6 +553,7 @@ public class MainPresenter {
                 handler.post(runnable);*/
 
 
+                //CORRECT HOVER SEQ
                 while (cnt[0] < 50) {
                     sendPacket(new HeightHoldPacket(0, 0, 0, target_height));
 
@@ -585,6 +600,7 @@ public class MainPresenter {
                 handler.post(runnable);*/
 
 
+                //CORRECT DOWN SEQ
                 while (cnt[0] < 50) {
                     sendPacket(new HeightHoldPacket(0, 0, 0, (-target_height + start_height) * (cnt[0] / 50.0f) + target_height));
 
@@ -601,7 +617,7 @@ public class MainPresenter {
                 }
 
 
-                //stop
+                //STOP
                 sendPacket(new CommanderPacket(0, 0, 0, (char) 0));
                 //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
                 CrtpPacket testing = wifiDirectDriver.receivePacket(1);
@@ -675,6 +691,8 @@ public class MainPresenter {
     2. The background thread that's running a flight sequence is currently sleeping
             - In this case, kill() interrupts the thread, which causes sleep() to throw an InterruptedException. The thread resumes the joystickRunnable thread and exits immediately.
      */
+
+    //FIXME: launch didn't seem to work after a kill?
 
     //request a kill. Called on pressing "kill" button
     public void kill() {
