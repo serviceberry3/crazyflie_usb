@@ -399,20 +399,27 @@ public class MainPresenter {
         }
 
         /* Stream HeightHold packets with no pitch, roll, yaw, and a height of TARG_HEIGHT, indefinitely, until the 'Land' button is pressed
-        * NOTE: JoystickRunnable should be paused at this point
+        * NOTE: JoystickRunnable should already be paused at this point
         */
         @Override
         public void run() {
             try {
                 while (true) {
-                    //CORRECT HOVER SEQ
+                    //HOVER SEQUENCE
                     sendPacket(new HeightHoldPacket(0, 0, 0, TARG_HEIGHT));
 
                     //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
                     CrtpPacket testing = wifiDirectDriver.receivePacket(1);
 
                     //Check if a kill has been requested. If so, end this thread.
+                    //NOTE: DRONE WILL FALL
                     if (killCheck()) {
+                        return;
+                    }
+
+                    //Check of a land has been requested. If so, return.
+                    if (landCheck()) {
+                        //The landing thread has begun at this point
                         return;
                     }
 
@@ -420,8 +427,9 @@ public class MainPresenter {
                 }
             }
 
-            //This thread can be interrupted by either hitting 'Kill' or 'Land'. In either case, stop and resume the joystick streaming
+            //This thread can be interrupted by hitting 'Kill'. In that case, stop and resume the joystick streaming
             catch (InterruptedException e) {
+                hovering.set(false);
                 e.printStackTrace();
                 joystickRunnable.onResume();
                 //thread now stops and goes home
@@ -443,11 +451,11 @@ public class MainPresenter {
         }
 
         /*Launch the drone up to a certain height and hover there.
-        * Since we stop the joystick streaming thread while we run the launch sequence, mOutQueue in the driver gets cleaned out (we sleep between
-        * sending packets during this sequence). That means the WifiDriverThread will continue to send NULL packets to the onboard phone during sleep time,
-        * because it tries to poll the out queue and comes up empty. We need to make sure the LinkedBlockingQueue poll() waitTime is long enough.
-        * Otherwise WifiDriverThread will flood the queue.
-        * */
+         * Since we stop the joystick streaming thread while we run the launch sequence, mOutQueue in the driver gets cleaned out (we sleep between
+         * sending packets during this sequence). That means the WifiDriverThread will continue to send NULL packets to the onboard phone during sleep time,
+         * because it tries to poll the out queue and comes up empty. We need to make sure the LinkedBlockingQueue poll() waitTime is long enough.
+         * Otherwise WifiDriverThread will flood the queue.
+         * */
         public void run() {
             try {
                 //pause the joystick sending thread so that we can safely run the launch sequence
@@ -499,16 +507,16 @@ public class MainPresenter {
                 //RUN prop test
                 handler.post(runnable);*/
 
-                //DEFINE up sequence
                 Log.i(LOG_TAG, "Lifting");
 
-                //CORRECT UP SEQ
+                //UP SEQUENCE
                 while (cnt[0] < 50) {
-                    sendPacket(new HeightHoldPacket(0, 0, 0, (float)start_height + (TARG_HEIGHT - start_height) * (cnt[0] / 50.0f)));
+                    sendPacket(new HeightHoldPacket(0, 0, 0, (float) start_height + (TARG_HEIGHT - start_height) * (cnt[0] / 50.0f)));
 
                     //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
                     CrtpPacket testing = wifiDirectDriver.receivePacket(1);
 
+                    //always check if 'Kill' button has been pressed
                     if (killCheck()) {
                         return;
                     }
@@ -518,29 +526,92 @@ public class MainPresenter {
                     cnt[0]++;
                 }
 
-                //reset counter to 0
-                cnt[0] = 0;
+                //what we want to do now is hover indefinitely. That means we need to keep streaming height hold pkts with target_height, while
+                //also running a joystick thread but disabling the thrust for the joystick and subbing in the correct thrust...
+                //OR: we could run a new thread that streams height hold packets and accepts right joystick pad for pitch and roll adjustments
+                //OR: just run a thread that streams height hold packets, don't resume joystick until after a 'land' sequence
+                startHoverThread();
 
-                //CORRECT HOVER SEQ
-                while (cnt[0] < 50) {
-                    sendPacket(new HeightHoldPacket(0, 0, 0, TARG_HEIGHT));
+                //set launching to false
+                launching.set(false);
+            }
 
-                    //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
-                    CrtpPacket testing = wifiDirectDriver.receivePacket(1);
+            //if this thread is interrupted by kill, resume the joystick streaming
+            catch (InterruptedException e) {
+                launching.set(false);
+                e.printStackTrace();
+                joystickRunnable.onResume();
+                //thread now stops and goes home
+            }
+        }
+    }
 
-                    if (killCheck()) {
-                        return;
-                    }
 
-                    Thread.sleep(100);
+    public void launch() {
+        launching.set(true);
+        mLaunchingThread = new Thread(new LaunchRunnable());
+        mLaunchingThread.start();
+    }
 
-                    cnt[0]++;
-                }
+    public void land() {
+        //joystick sending thread should already be paused. Let's set the landing AtomicBoolean to true, which will be detected when landCheck() is run inside
+        //the hover thread
+        landing.set(true);
+    }
 
-                //reset counter to 0
-                cnt[0] = 0;
+    public boolean landCheck() {
+        //check to see if land button has been pressed.
+        if (landing.get()) {
+            //if has been pressed, start the landing thread and return true to signal to the hover thread to return
+            mLandingThread = new Thread(new LandRunnable());
+            mLandingThread.start();
 
-                //CORRECT DOWN SEQ
+            //reset the landing and hovering AtomicBools to false ('landing' shouldn't need to be used again)
+            landing.set(false); hovering.set(false);
+
+            return true;
+        }
+
+        return false;
+    }
+
+    //Runnable that safely lands the drone, starting from TARG_HEIGHT
+    class LandRunnable implements Runnable {
+        private final Object mPauseLock;
+        private boolean mPaused;
+        private boolean mFinished;
+
+        public LandRunnable() {
+            mPauseLock = new Object();
+            mPaused = false;
+            mFinished = false;
+        }
+
+        /*Land the drone.
+         * Since we stop the joystick streaming thread while we run the launch sequence, mOutQueue in the driver gets cleaned out (we sleep between
+         * sending packets during this sequence). That means the WifiDriverThread will continue to send NULL packets to the onboard phone during sleep time,
+         * because it tries to poll the out queue and comes up empty. We need to make sure the LinkedBlockingQueue poll() waitTime is long enough.
+         * Otherwise WifiDriverThread will flood the queue.
+         * */
+        public void run() {
+            try {
+                //joystick runnable should already be paused
+
+                Log.i(LOG_TAG, "Landing...");
+
+                final int[] cnt = {0};
+                int thrust_mult = 1;
+                int thrust_step = 100;
+                int thrust_dstep = 10;
+                int thrust = 3000;
+                int pitch = 0;
+                int roll = 0;
+                int yawrate = 0;
+                final float start_height = 0.05f;
+
+                //NOTE: the distance of the ZRanger is not accurate, 1.2 => 1.5m
+
+                //DOWN SEQUENCE
                 while (cnt[0] < 50) {
                     sendPacket(new HeightHoldPacket(0, 0, 0, (-TARG_HEIGHT + start_height) * (cnt[0] / 50.0f) + TARG_HEIGHT));
 
@@ -562,18 +633,14 @@ public class MainPresenter {
                 //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
                 CrtpPacket testing = wifiDirectDriver.receivePacket(1);
 
-                //Thread.sleep(10);
+                //resume joystick streaming
+                joystickRunnable.onResume();
 
-
-                //what we want to do now is hover indefinitely. That means we need to keep streaming height hold pkts with target_height, while
-                //also running a joystick thread but disabling the thrust for the joystick and subbing in the correct thrust...
-                //OR: we could run a new thread that streams height hold packets and accepts right joystick pad for pitch and roll adjustments
-                //OR: just run a thread that streams height hold packets, don't resume joystick until after a 'land' sequence
-                startHoverThread();
-
-                //set launching to false
-                launching.set(false);
+                //'landing' should already have been reset to false at this time
+                //FIXME: it makes more sense for resetting 'landing' to false to go here
             }
+
+            //If a kill was requested, stop and resume joystick thread
             catch (InterruptedException e) {
                 e.printStackTrace();
                 joystickRunnable.onResume();
@@ -603,20 +670,6 @@ public class MainPresenter {
         }
     }
 
-    public void launch() {
-        launching.set(true);
-        mLaunchingThread = new Thread(new LaunchRunnable());
-        mLaunchingThread.start();
-    }
-
-    public void land() {
-        //pause the joystick sending thread so that we can safely run the landing sequence
-        joystickRunnable.onPause();
-
-        //TODO: landing sequence
-
-        joystickRunnable.onResume();
-    }
 
 
     /*Want killing to happen as fast as possible. That means If the launch thread is sleeping, interrupt it. It is undefined whether one of the below *Thread.interrupt()s
@@ -629,8 +682,6 @@ public class MainPresenter {
     2. The background thread that's running a flight sequence is currently sleeping
             - In this case, kill() interrupts the thread, which causes sleep() to throw an InterruptedException. The thread resumes the joystickRunnable thread and exits immediately.
      */
-
-    //FIXME: launch didn't seem to work after a kill?
 
     //request a kill. Called on pressing "kill" button
     public void kill() {
@@ -646,6 +697,10 @@ public class MainPresenter {
         //if hovering, interrupt the hover thread immediately (if the Thread is sleeping, this will throw exception to end it)
         if (hovering.get())
             mHoverThread.interrupt();
+
+        //if landing, interrupt the hover thread immediately (if the Thread is sleeping, this will throw exception to end it)
+        if (landing.get())
+            mLandingThread.interrupt();
     }
 
     //check if user has requested kill. If so, kill the drone
@@ -667,6 +722,9 @@ public class MainPresenter {
 
             //reset kill to false, atomically
             kill.set(false);
+
+            //make sure launching, landing, and hovering are all reset to false
+            launching.set(false); landing.set(false); hovering.set(false);
 
             //let background thread know to return if necessary
             return true;

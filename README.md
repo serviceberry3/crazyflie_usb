@@ -1,5 +1,8 @@
 Crazyflie client app for Android, modified to send control commands over Wifi Direct to a second onboard phone which relays them via USB to the drone.
 
+# UPDATES #
+02/19/21: Launch and Land buttons, as well as all Kill functionality, completed.
+
 
 # Connection instructions #
 On the onboard phone (which is plugged into drone via USB), open the [wifidirect_ubuntu2pixel](https://github.com/serviceberry3/wifidirect_ubuntu2pixel) app and hit "Discover Peers."
@@ -14,7 +17,7 @@ After a moment, you should see the toast "Connection established successfully!" 
 
 
 # Other instructions #
-To run a script that launches the Crazyflie up to a hovering position, press the "Launch" button.
+To run a script that launches the Crazyflie up to a hovering position, press the "Launch" button. The Crazyflie will hover indefinitely at TARG_HEIGHT.
 
 To run a script that safely lands the Crazyflie from the height attained via "Launch," press the "Land" button.
 
