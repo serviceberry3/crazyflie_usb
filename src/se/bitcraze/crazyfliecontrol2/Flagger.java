@@ -1,6 +1,7 @@
 package se.bitcraze.crazyfliecontrol2;
 
 import se.bitcraze.crazyflie.lib.crazyflie.Crazyflie;
+import se.bitcraze.crazyflie.lib.crtp.CrtpPacket;
 import se.bitcraze.crazyfliecontrol.controller.WifiDirect;
 
 /** Class to send high-level signals only from controller device->onboard phone,
@@ -12,9 +13,16 @@ public class Flagger {
     private WifiDirect wifiDirectDriver;
 
 
-
     public Flagger(Crazyflie mCrazyflie, WifiDirect wifiDirectDriver) {
         this.mCrazyflie = mCrazyflie;
         this.wifiDirectDriver = wifiDirectDriver;
+    }
+
+    public void sendStartFollowSignal() {
+        wifiDirectDriver.sendPacket(new CrtpPacket(Signal.START_FOLLOW));
+    }
+
+    public void sendStopFollowSignal() {
+        wifiDirectDriver.sendPacket(new CrtpPacket(Signal.STOP_FOLLOW));
     }
 }

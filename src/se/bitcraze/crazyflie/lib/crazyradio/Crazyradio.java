@@ -96,17 +96,6 @@ public class Crazyradio {
             return;
         }
 
-        /*
-        def __init__(self, device=None, devid=0):
-            if device is None:
-                try:
-                    device = _find_devices()[devid]
-                except Exception:
-                    raise Exception("Cannot find a Crazyradio Dongle")
-
-            self.dev = device
-        */
-
         this.mVersion = mUsbInterface.getFirmwareVersion();
 
         if (this.mVersion < 0.4) {

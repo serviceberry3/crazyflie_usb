@@ -121,6 +121,7 @@ public class MainActivity extends Activity {
     private Button mLaunchButton;
     private Button mLandButton;
     private Button mKillButton;
+    private Button mFollowButton;
     private ImageButton mRingEffectButton;
     private ImageButton mHeadlightButton;
     private ImageButton mBuzzerSoundButton;
@@ -131,6 +132,8 @@ public class MainActivity extends Activity {
     private TextView mTextView_battery;
     private TextView mTextView_linkQuality;
     private MainPresenter mPresenter;
+
+    private boolean following = false;
 
 
     IntentFilter peerfilter;
@@ -192,6 +195,7 @@ public class MainActivity extends Activity {
         mLaunchButton = (Button) findViewById(R.id.launcher_button);
         mLandButton = (Button) findViewById(R.id.lander_button);
         mKillButton = (Button) findViewById(R.id.kill_button);
+        mFollowButton = (Button) findViewById(R.id.follow_button);
         initializeMenuButtons();
 
         //view to display flight data
@@ -367,6 +371,22 @@ public class MainActivity extends Activity {
                 else {
                     showToastie("Please complete your Wifi Direct connection first");
                 }
+            }
+        });
+
+        mFollowButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if (following) {
+                    //if currently following, tell the drone to stop following
+                    mPresenter.stopFollowing();
+                    mFollowButton.setText(R.string.start_follow);
+                }
+                else {
+                    mPresenter.startFollowing();
+                    mFollowButton.setText(R.string.stop_follow);
+                }
+                following = !following;
             }
         });
 

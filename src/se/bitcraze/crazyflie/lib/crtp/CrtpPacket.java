@@ -33,6 +33,8 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
 
+import se.bitcraze.crazyfliecontrol2.Signal;
+
 /**
  * Packet of data which can be sent/received from/to the Crazyflie. All packet
  * implementations must be immutable to avoid issues with modifying packets via
@@ -146,10 +148,17 @@ public class CrtpPacket {
     private final byte[] mPacketPayload;
     private byte[] mSerializedPacket;
     private byte[] mExpectedReply;
+    private Signal mPacketSignal = null;
 
     public CrtpPacket() {
         mPacketHeader = null;
         mPacketPayload = null;
+    }
+
+    public CrtpPacket(Signal packetSignal) {
+        this.mPacketHeader = null;
+        this.mPacketPayload = this.mSerializedPacket = null;
+        this.mPacketSignal = packetSignal;
     }
 
     /**
@@ -243,8 +252,15 @@ public class CrtpPacket {
      * @return byte array containing the header and packet data.
      */
     public byte[] toByteArray() {
+        //if we're just sending a signal, return ByteBuffer with just that one byte
+        if (mPacketSignal != null) {
+            ByteBuffer buffer = ByteBuffer.allocate(1).order(BYTE_ORDER);
+            buffer.put(mPacketSignal.getNumber());
+            return buffer.array();
+        }
+
         //if it's the first call, serialize the packet and cache it
-        if (mSerializedPacket == null) {
+        else if (mSerializedPacket == null) {
             //allocate bytebuffer big enough for the data plus one for the header byte
             //will be 15 for CommanderPkt, 17 for HeightHoldPkt
             ByteBuffer buffer = ByteBuffer.allocate(getDataByteCount() + 1).order(BYTE_ORDER);
@@ -261,6 +277,8 @@ public class CrtpPacket {
 
             mSerializedPacket = buffer.array();
         }
+
+        //otherwise it's already cached, just return it
         return mSerializedPacket;
     }
 

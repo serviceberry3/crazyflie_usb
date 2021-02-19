@@ -55,6 +55,8 @@ public class MainPresenter {
     private Toc mLogToc;
     private Toc mParamToc;
 
+    private Flagger mFlagger;
+
     private boolean mHeadlightToggle = false;
     private boolean mSoundToggle = false;
     private int mRingEffect = 0;
@@ -117,7 +119,7 @@ public class MainPresenter {
                 mCrazyflie.startConnectionSetup_BLE();
             }
 
-            //set button look
+            //set button style
             else {
                 mainActivity.setConnectionButtonConnected();
             }
@@ -733,6 +735,14 @@ public class MainPresenter {
         return false;
     }
 
+    public void stopFollowing() {
+        mFlagger.sendStopFollowSignal();
+    }
+
+    public void startFollowing() {
+        mFlagger.sendStartFollowSignal();
+    }
+
     public void connectWifiDirect() {
         wifiDirectDriver.discoverPeers();
     }
@@ -761,12 +771,15 @@ public class MainPresenter {
         mCrazyflie.connect();
 
         //add console listener
-        if (mCrazyflie != null) {
+        if (mCrazyflie != null && wifiDirectDriver != null) {
             mConsoleListener = new ConsoleListener();
             mConsoleListener.setMainActivity(mainActivity);
 
             //add data listener to our Crazyflie instance
             mCrazyflie.addDataListener(mConsoleListener);
+
+            //instantiate our Flagger
+            mFlagger = new Flagger(mCrazyflie, wifiDirectDriver);
         }
 
         //at this point all Wifi Direct comms are set up, let's set wdConnected to true

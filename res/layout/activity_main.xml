@@ -118,6 +118,21 @@
         android:elevation="2dp"
         android:text="@string/rqst_conn_button"/>
 
+    <Button
+        android:id="@+id/follow_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="10dp"
+        android:layout_marginLeft="10dp"
+        android:layout_marginEnd="24dp"
+        android:layout_marginRight="10dp"
+        android:layout_marginTop="3dp"
+        android:layout_marginBottom="5dp"
+        android:layout_below="@+id/rqst_conn_button"
+        android:layout_toLeftOf="@id/imageButton_settings"
+        android:elevation="2dp"
+        android:text="@string/start_follow"/>
+
     <ImageButton
         android:id="@+id/imageButton_settings"
         android:layout_width="wrap_content"

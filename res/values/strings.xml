@@ -164,5 +164,7 @@
     <string name="kill_button">Kill</string>
     <string name="peer_disc_button">Discover Wifi peers</string>
     <string name="rqst_conn_button">Rqst conn to onboard phone</string>
+    <string name="start_follow">Start human follow</string>
+    <string name="stop_follow">Stop human follow</string>
 
 </resources>
