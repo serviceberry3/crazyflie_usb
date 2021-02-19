@@ -5,9 +5,9 @@ Crazyflie client app for Android, modified to send control commands over Wifi Di
 
 
 # Connection instructions #
-On the onboard phone (which is plugged into drone via USB), open the [wifidirect_ubuntu2pixel](https://github.com/serviceberry3/wifidirect_ubuntu2pixel) app and hit "Discover Peers."
+On the onboard phone (which is plugged into drone via USB), open the [crazyflie_receiver](https://github.com/serviceberry3/crazyflie_receiver) app and hit "Discover Peers."
 
-Open the cf-usb app on the controller phone and hit the upper "Dicover Wifi peers" button to start peer discovery.
+Open the cf-usb app on the controller phone and hit the upper "Discover Wifi peers" button to start peer discovery.
 
 Wait until you see the toast "Onboard Pixel found" and you see the name of your Android device (the one running cf-usb) in the list on the onboard phone. (You need to modify line 81 of WifiDirect.java in the client to match name of your device.)
 
