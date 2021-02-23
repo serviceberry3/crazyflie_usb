@@ -431,7 +431,7 @@ public class MainPresenter {
 
             //This thread can be interrupted by hitting 'Kill'. In that case, stop and resume the joystick streaming
             catch (InterruptedException e) {
-                hovering.set(false);
+                hovering.set(false); kill.set(false);
                 e.printStackTrace();
                 joystickRunnable.onResume();
                 //thread now stops and goes home
@@ -540,7 +540,7 @@ public class MainPresenter {
 
             //if this thread is interrupted by kill, resume the joystick streaming
             catch (InterruptedException e) {
-                launching.set(false);
+                launching.set(false); kill.set(false);
                 e.printStackTrace();
                 joystickRunnable.onResume();
                 //thread now stops and goes home
@@ -644,6 +644,7 @@ public class MainPresenter {
 
             //If a kill was requested, stop and resume joystick thread
             catch (InterruptedException e) {
+                kill.set(false);
                 e.printStackTrace();
                 joystickRunnable.onResume();
                 //thread now stops and goes home
@@ -742,6 +743,8 @@ public class MainPresenter {
     public void startFollowing() {
         mFlagger.sendStartFollowSignal();
     }
+
+    public void killUsb() { mFlagger.sendKillSignal(); }
 
     public void connectWifiDirect() {
         wifiDirectDriver.discoverPeers();

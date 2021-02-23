@@ -121,6 +121,7 @@ public class MainActivity extends Activity {
     private Button mLaunchButton;
     private Button mLandButton;
     private Button mKillButton;
+    private Button mKillUsbButton;
     private Button mFollowButton;
     private ImageButton mRingEffectButton;
     private ImageButton mHeadlightButton;
@@ -196,6 +197,7 @@ public class MainActivity extends Activity {
         mLandButton = (Button) findViewById(R.id.lander_button);
         mKillButton = (Button) findViewById(R.id.kill_button);
         mFollowButton = (Button) findViewById(R.id.follow_button);
+        mKillUsbButton = (Button) findViewById(R.id.kill_usb_button);
         initializeMenuButtons();
 
         //view to display flight data
@@ -377,16 +379,32 @@ public class MainActivity extends Activity {
         mFollowButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                if (following) {
-                    //if currently following, tell the drone to stop following
-                    mPresenter.stopFollowing();
-                    mFollowButton.setText(R.string.start_follow);
+                if (mPresenter.isWdConnected()) {
+                    if (following) {
+                        //if currently following, tell the drone to stop following
+                        mPresenter.stopFollowing();
+                        mFollowButton.setText(R.string.start_follow);
+                    } else {
+                        mPresenter.startFollowing();
+                        mFollowButton.setText(R.string.stop_follow);
+                    }
+                    following = !following;
                 }
                 else {
-                    mPresenter.startFollowing();
-                    mFollowButton.setText(R.string.stop_follow);
+                    showToastie("Please complete your Wifi Direct connection first");
                 }
-                following = !following;
+            }
+        });
+
+        mKillUsbButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if (mPresenter.isWdConnected()) {
+                    mPresenter.killUsb();
+                }
+                else {
+                    showToastie("Please complete your Wifi Direct connection first");
+                }
             }
         });
 

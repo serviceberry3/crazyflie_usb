@@ -2,7 +2,8 @@ package se.bitcraze.crazyfliecontrol2;
 
 public enum Signal {
     START_FOLLOW(1),
-    STOP_FOLLOW(2);
+    STOP_FOLLOW(2),
+    KILL(3);
 
     private byte mNumber;
 

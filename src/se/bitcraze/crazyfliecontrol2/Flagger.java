@@ -25,4 +25,8 @@ public class Flagger {
     public void sendStopFollowSignal() {
         wifiDirectDriver.sendPacket(new CrtpPacket(Signal.STOP_FOLLOW));
     }
+
+    public void sendKillSignal() {
+        wifiDirectDriver.sendPacket(new CrtpPacket(Signal.KILL));
+    }
 }
