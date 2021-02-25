@@ -703,6 +703,10 @@ public class WifiDirect extends CrtpDriver {
     //send a packet to onboard Pixel (on the drone) via WifiDirect and wait for ACK
     public void asServerSendDataAndWaitForResponse(byte[] out, byte[] in, OutputStream outStream, InputStream inStream) {
         try {
+            if (outStream == null) {
+                mContext.showToastie("A problem occurred with the Wifi socket. Please retry the connection process.");
+                return;
+            }
             outStream.write(out);
         }
 
@@ -714,6 +718,10 @@ public class WifiDirect extends CrtpDriver {
         Log.i(TAG,"SenddataandWait waiting for read in from drone...");
         //block waiting for a packet
         try {
+            if (inStream == null) {
+                mContext.showToastie("A problem occurred with the Wifi socket. Please retry the connection process.");
+                return;
+            }
             int dataIn = inStream.read(in);
             Log.i(TAG, String.format("Senddatandwait Got back %x from drone, returning...", in[0]));
         }

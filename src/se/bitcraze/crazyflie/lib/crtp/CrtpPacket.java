@@ -262,7 +262,7 @@ public class CrtpPacket {
         //if it's the first call, serialize the packet and cache it
         else if (mSerializedPacket == null) {
             //allocate bytebuffer big enough for the data plus one for the header byte
-            //will be 15 for CommanderPkt, 17 for HeightHoldPkt
+            //will be 15 for CommanderPkt, 18 for HeightHoldPkt
             ByteBuffer buffer = ByteBuffer.allocate(getDataByteCount() + 1).order(BYTE_ORDER);
 
             //fake radio headers

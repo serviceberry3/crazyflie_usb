@@ -752,7 +752,7 @@ public class MainPresenter {
 
     public void connectToPixel(File mCacheDir) {
         //make sure wifiDirectDriver and its pixelDev are non-null
-        if (wifiDirectDriver==null || wifiDirectDriver.pixelDev == null) {
+        if (wifiDirectDriver == null || wifiDirectDriver.pixelDev == null) {
             mainActivity.showToastie("Please run peer discovery first and wait until you see \"Onboard Pixel found\" toast");
             return;
         }
@@ -770,6 +770,11 @@ public class MainPresenter {
 
     //callback for when WifiDirect connection has finished
     public void onConnectToPixelFinished() {
+        if (mCrazyflie == null) {
+            mainActivity.showToastie("There was a problem with setting up the Wifi connection. Please close both apps and try again.");
+            return;
+        }
+
         //call connect on the driver, which just shows toast and starts the WifiDirect communication thread
         mCrazyflie.connect();
 
