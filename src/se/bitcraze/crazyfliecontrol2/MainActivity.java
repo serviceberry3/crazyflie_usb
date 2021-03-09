@@ -144,6 +144,10 @@ public class MainActivity extends Activity {
     IntentFilter connectionfilter;
     IntentFilter p2pEnabled;
 
+    public void setFollowing(boolean requested) {
+        this.following = requested;
+    }
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         Log.i(LOG_TAG, "Good morning from the Main commander");
@@ -229,100 +233,6 @@ public class MainActivity extends Activity {
 
         //storage
         setCacheDir();
-
-        final float TARG_HEIGHT = 0.3f;
-
-        final int[] cnt = {0};
-        int thrust_mult = 1;
-        int thrust_step = 100;
-        int thrust_dstep = 10;
-        int thrust = 3000;
-        int pitch = 0;
-        int roll = 0;
-        int yawrate = 0;
-        final float start_height = 0.05f;
-
-        //NOTE: the distance of the ZRanger is not accurate, 1.2 => 1.5m
-
-                /*
-                //get Python interpreter
-                Python python = Python.getInstance();
-                PyObject pythonFile = python.getModule("cf-python-lib/examples/flytest.py");
-                pythonFile.call();*/
-
-
-        //create new Handler to post delayed work to the main thread
-        //final android.os.Handler handler = new Handler(Looper.getMainLooper());
-
-                /*
-                //DEFINE prop test
-                runnable = new Runnable() {
-                    public void run() {
-                        //send low thrust packet to indicate packet transfer success
-                        sendPacket(new CommanderPacket(0, 0, 0, (char) 10001));
-
-                        //BLOCK UNTIL RECEIVE CONFIRMATION FROM DRONE BACK THRU PIPELINE
-                        CrtpPacket testing = wifiDirectDriver.receivePacket(1);
-
-                        if (cnt[0]++ < 20) {
-                            handler.post(this);
-                        }
-                        //otherwise runnable is complete
-                    }
-                };
-
-                //RUN prop test
-                handler.post(runnable);*/
-
-
-        HeightHoldPacket thishhpkt;
-
-        //UP SEQUENCE
-        while (cnt[0] < 50) {
-            thishhpkt = new HeightHoldPacket(0, 0, 0, (float) start_height + (TARG_HEIGHT - start_height) * (cnt[0] / 50.0f));
-
-            byte[] raw_pkt = thishhpkt.toByteArray();
-
-            Log.i(LOG_TAG, String.format("Heightholdpkt lift #%d 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X " +
-                            "0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X", cnt[0],
-
-                    //0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X" +
-                      //      "0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X",
-                    raw_pkt[0], raw_pkt[1], raw_pkt[2], raw_pkt[3], raw_pkt[4], raw_pkt[5], raw_pkt[6], raw_pkt[7], raw_pkt[8], raw_pkt[9],
-                    raw_pkt[10], raw_pkt[11], raw_pkt[12], raw_pkt[13], raw_pkt[14], raw_pkt[15], raw_pkt[16], raw_pkt[17]
-
-                    /*raw_pkt[18], raw_pkt[19],
-                    raw_pkt[20], raw_pkt[21], raw_pkt[22], raw_pkt[23], raw_pkt[24], raw_pkt[25], raw_pkt[26], raw_pkt[27], raw_pkt[28], raw_pkt[29],
-                    raw_pkt[30]*/));
-
-            cnt[0]++;
-        }
-
-
-        cnt[0] = 0;
-        while (cnt[0] < 50) {
-            //HOVER SEQUENCE
-            thishhpkt = new HeightHoldPacket(0, 0, 0, TARG_HEIGHT);
-
-            byte[] raw_pkt = thishhpkt.toByteArray();
-
-            Log.i(LOG_TAG, String.format("Heightholdpkt hover #%d 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X " +
-                            "0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X", cnt[0],
-
-                    //0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X" +
-                    //      "0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X",
-                    raw_pkt[0], raw_pkt[1], raw_pkt[2], raw_pkt[3], raw_pkt[4], raw_pkt[5], raw_pkt[6], raw_pkt[7], raw_pkt[8], raw_pkt[9],
-                    raw_pkt[10], raw_pkt[11], raw_pkt[12], raw_pkt[13], raw_pkt[14], raw_pkt[15], raw_pkt[16], raw_pkt[17]
-
-                    /*raw_pkt[18], raw_pkt[19],
-                    raw_pkt[20], raw_pkt[21], raw_pkt[22], raw_pkt[23], raw_pkt[24], raw_pkt[25], raw_pkt[26], raw_pkt[27], raw_pkt[28], raw_pkt[29],
-                    raw_pkt[30]*/));
-
-            cnt[0]++;
-        }
-
-
-        Log.i(LOG_TAG, "Done pkt printing");
     }
 
     public MainPresenter getMainPresenter() {
@@ -466,6 +376,10 @@ public class MainActivity extends Activity {
                 if (mPresenter.isWdConnected()) {
                     showToastie("Killing...");
                     mPresenter.kill();
+
+                    //make sure following set to false, and human follow button text is correct
+                    following = false;
+                    mFollowButton.setText(R.string.start_follow);
                 }
                 else {
                     showToastie("Please complete your Wifi Direct connection first");
@@ -498,6 +412,10 @@ public class MainActivity extends Activity {
             public void onClick(View view) {
                 if (mPresenter.isWdConnected()) {
                     mPresenter.killUsb();
+
+                    //make sure following set to false, and human follow button text is correct
+                    following = false;
+                    mFollowButton.setText(R.string.start_follow);
                 }
                 else {
                     showToastie("Please complete your Wifi Direct connection first");

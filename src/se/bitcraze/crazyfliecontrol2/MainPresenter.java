@@ -89,7 +89,7 @@ public class MainPresenter {
     //constructor
     public MainPresenter(MainActivity mainActivity) {
         this.mainActivity = mainActivity;
-        wifiDirectDriver = new WifiDirect(mainActivity);
+        wifiDirectDriver = new WifiDirect(mainActivity, this);
     }
 
     public void onDestroy() {
@@ -158,34 +158,41 @@ public class MainPresenter {
 
         @Override
         public void connectionLost(final String msg) {
-            //show message as Toast on UI thread
-            mainActivity.showToastie(msg);
+            if (mainActivity != null) {
+                //show message as Toast on UI thread
+                mainActivity.showToastie(msg);
 
-            //change the look of the connect button
-            mainActivity.setConnectionButtonDisconnected();
+                //change the look of the connect button
+                mainActivity.setConnectionButtonDisconnected();
 
-            //disconnect
-            disconnect();
+                //disconnect
+                disconnect();
+            }
         }
 
         @Override
         public void connectionFailed(final String msg) {
-            mainActivity.showToastie(msg);
-            disconnect();
+            if (mainActivity != null) {
+                mainActivity.showToastie(msg);
+                disconnect();
+            }
         }
 
         @Override
         public void disconnected() {
-            //just do some UI stuff
-            mainActivity.showToastie("Disconnected");
-            mainActivity.setConnectionButtonDisconnected();
-            mainActivity.disableButtonsAndResetBatteryLevel();
-            stopLogConfigs(mDefaultLogConfig);
+            if (mainActivity != null) {
+                //just do some UI stuff
+                mainActivity.showToastie("Disconnected");
+                mainActivity.setConnectionButtonDisconnected();
+                mainActivity.disableButtonsAndResetBatteryLevel();
+                stopLogConfigs(mDefaultLogConfig);
+            }
         }
 
         @Override
         public void linkQualityUpdated(final int quality) {
-            mainActivity.setLinkQualityText(quality + "%");
+            if (mainActivity != null)
+                mainActivity.setLinkQualityText(quality + "%");
         }
     };
 
@@ -247,6 +254,11 @@ public class MainPresenter {
         else {
             Log.e(LOG_TAG, "CRAZYFLIE CAME UP NULL");
         }
+    }
+
+    //probably caused in case of an error
+    public void pauseJoystickRunnable() {
+        joystickRunnable.onPause();
     }
 
 

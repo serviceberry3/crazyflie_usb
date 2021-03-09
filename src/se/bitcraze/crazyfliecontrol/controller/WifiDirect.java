@@ -43,6 +43,7 @@ import se.bitcraze.crazyflie.lib.crazyradio.RadioAck;
 import se.bitcraze.crazyflie.lib.crtp.CrtpDriver;
 import se.bitcraze.crazyflie.lib.crtp.CrtpPacket;
 import se.bitcraze.crazyfliecontrol2.MainActivity;
+import se.bitcraze.crazyfliecontrol2.MainPresenter;
 
 public class WifiDirect extends CrtpDriver {
 
@@ -88,8 +89,11 @@ public class WifiDirect extends CrtpDriver {
 
     public volatile boolean connected = false;
 
-    public WifiDirect(MainActivity activity) {
+    private MainPresenter mainPresenter;
+
+    public WifiDirect(MainActivity activity, MainPresenter mainPresenter) {
         this.mContext = activity;
+        this.mainPresenter = mainPresenter;
 
         //this.mInQueue = new LinkedBlockingQueue<CrtpPacket>();
 
@@ -336,6 +340,14 @@ public class WifiDirect extends CrtpDriver {
             Log.i(TAG, "WifiDirect putting control packet on the queue, size of queue before is " + mOutQueue.size());
             mOutQueue.put(packet);
             Log.i(TAG, "WifiDirect finished queue packet put, size of queue now " + mOutQueue.size());
+
+            if (mOutQueue.size() > 10) {
+                mContext.showToastie("There was a problem with the connection. Please close app and try again.");
+                disconnect();
+
+                //halt joystick stream indefinitely
+                mainPresenter.pauseJoystickRunnable();
+            }
         }
 
         catch (InterruptedException e) {
